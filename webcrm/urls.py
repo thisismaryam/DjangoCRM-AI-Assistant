@@ -18,7 +18,8 @@ urlpatterns = [
         'OAuth-2/authorize/',
         staff_member_required(get_refresh_token), 
         name='get_refresh_token'
-    ),   
+    ),
+    path('api/ai/', include('ai_assistant.urls')),
 ]
 
 urlpatterns += static(
@@ -37,4 +38,9 @@ urlpatterns += i18n_patterns(
     path(settings.SECRET_CRM_PREFIX, include('tasks.urls')),
     path(settings.SECRET_ADMIN_PREFIX, admin.site.urls),
     path('contact-form/<uuid:uuid>/', contact_form, name='contact_form'),
+    path('api/ai/', include('ai_assistant.urls')),
+)
+
+urlpatterns += static(
+    settings.STATIC_URL, document_root=settings.STATIC_ROOT
 )

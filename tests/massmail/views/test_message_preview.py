@@ -23,6 +23,7 @@ class TestMessagePreview(BaseTestCase):
         file_in_media = settings.MEDIA_ROOT / file_name
         file_in_static = settings.STATIC_ROOT / file_name
         file_in_media.write_text('P5 1 1 1\n\0')
+        file_in_static.parent.mkdir(parents=True, exist_ok=True)
         file_in_static.write_text('P5 1 1 1\n\0')
         subject = f"Happy New Year {random()}"
         content = """

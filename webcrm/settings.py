@@ -26,21 +26,8 @@ ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 # Database
 DATABASES = {
     'default': {
-        # for SQLite3
         'ENGINE': 'django.db.backends.sqlite3',
-
-        # for MySQl
-        #'ENGINE': 'django.db.backends.mysql',
-        #'PORT': '3306',
-
-        # for PostgreSQL
-        # "ENGINE": "django.db.backends.postgresql",
-        # 'PORT': '5432',
-
-        'NAME': 'crm_db',
-        'USER': 'crm_user',
-        'PASSWORD': 'crmpass',
-        'HOST': 'localhost',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
@@ -118,7 +105,9 @@ INSTALLED_APPS = [
     'voip',
     'common.apps.CommonConfig',
     'settings',
-    'quality'
+    'quality',
+    'ai_assistant',
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
@@ -172,8 +161,9 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # Static files (CSS, JavaScript, Images)
-STATIC_URL = 'static/'
-STATIC_ROOT = BASE_DIR / 'static'
+STATIC_URL = '/static/'
+STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'

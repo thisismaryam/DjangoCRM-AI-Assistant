@@ -1,0 +1,406 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}AI Assistant | {{ site_title }}{% endblock %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <style>
+        /* ── Layout ── */
+        #ai-chat-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            max-width: 900px;
+        }
+
+        /* ── Chat history box ── */
+        #chat-box {
+            border: 1px solid var(--border-color, #ccc);
+            border-radius: 4px;
+            padding: 16px;
+            height: 420px;
+            overflow-y: auto;
+            background: var(--darkened-bg, #f8f8f8);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* ── Individual messages ── */
+        .msg {
+            margin-bottom: 12px;
+            padding: 10px 14px;
+            border-radius: 6px;
+            max-width: 85%;
+            word-wrap: break-word;
+        }
+        .msg-user {
+            background: var(--primary, #417690);
+            color: #fff;
+            margin-left: auto;
+            text-align: right;
+        }
+        .msg-ai {
+            background: var(--selected-row, #e8f0d8);
+            color: var(--body-fg, #333);
+            margin-right: auto;
+        }
+        .msg-error {
+            background: #fde8e8;
+            color: #c0392b;
+            border: 1px solid #c0392b;
+            margin-right: auto;
+        }
+        .msg-typing {
+            background: var(--darkened-bg, #eee);
+            color: var(--body-quiet-color, #666);
+            margin-right: auto;
+            font-style: italic;
+        }
+        .msg-ai p { margin: 0 0 8px; }
+        .msg-ai p:last-child { margin-bottom: 0; }
+        .msg-ai ul, .msg-ai ol { padding-left: 24px; }
+        .msg-ai a { color: var(--link-fg, var(--primary, #417690)); }
+
+        /* ── Approval card ── */
+        .approval-card {
+            border: 2px solid var(--primary, #417690);
+            padding: 16px;
+            border-radius: 6px;
+            background: var(--darkened-bg, #f8f8f8);
+            margin-bottom: 12px;
+        }
+        .approval-card h3 {
+            margin: 0 0 10px 0;
+            color: var(--primary, #417690);
+            font-size: 15px;
+        }
+        .approval-card pre {
+            background: var(--body-bg, #fff);
+            border: 1px solid var(--border-color, #ccc);
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            color: var(--body-fg, #333);
+        }
+        .approval-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        /* ── Input area ── */
+        #chat-input-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+        #chat-input {
+            flex: 1;
+            padding: 10px 14px;
+            border: 1px solid var(--border-color, #ccc);
+            border-radius: 4px;
+            font-size: 14px;
+            background: var(--body-bg, #fff);
+            color: var(--body-fg, #333);
+        }
+        #chat-input:focus {
+            outline: none;
+            border-color: var(--primary, #417690);
+            box-shadow: 0 0 0 2px rgba(65,118,144,0.2);
+        }
+
+        /* ── Buttons ── */
+        .btn-send {
+            padding: 10px 20px;
+            background: var(--primary, #417690);
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-send:hover { background: var(--primary-fg, #205067); }
+        .btn-send:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .btn-approve {
+            padding: 8px 18px;
+            background: #28a745;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .btn-approve:hover { background: #218838; }
+        .btn-approve:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .btn-reject {
+            padding: 8px 18px;
+            background: #dc3545;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .btn-reject:hover { background: #c82333; }
+        .btn-reject:disabled { opacity: 0.6; cursor: not-allowed; }
+    </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; {% trans 'AI Assistant' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="ai-chat-wrapper">
+    <div id="content-main">
+        <div id="chat-box" aria-live="polite" aria-label="Chat history"></div>
+
+        <div id="chat-input-row">
+            <input
+                type="text"
+                id="chat-input"
+                placeholder="{% trans 'Ask a question or say: create a lead for John, email john@example.com' %}"
+                autocomplete="off"
+                onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); sendMessage(); }"
+            >
+            <button id="send-btn" class="btn-send" onclick="sendMessage()">
+                <i class="material-icons" style="font-size:18px;">send</i>
+                {% trans 'Send' %}
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentThreadId = null;
+
+    function escapeHtml(text) {
+        const d = document.createElement('div');
+        d.appendChild(document.createTextNode(String(text)));
+        return d.innerHTML;
+    }
+
+    function appendInlineMarkdown(parent, text) {
+        const tokenPattern = /<a\s+href=(["'])([^"'<>]+)\1[^>]*>(.*?)<\/a>|\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)]+)\)/g;
+        let lastIndex = 0;
+        let match;
+
+        while ((match = tokenPattern.exec(text)) !== null) {
+            parent.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+
+            const isHtmlLink = match[2] !== undefined;
+            const isBold = match[4] !== undefined;
+            if (isBold) {
+                const strong = document.createElement('strong');
+                strong.textContent = match[4];
+                parent.appendChild(strong);
+            } else {
+                const label = isHtmlLink ? match[3] : match[5];
+                const href = isHtmlLink ? match[2] : match[6];
+                let parsedHref;
+                try {
+                    parsedHref = new URL(href, window.location.href);
+                } catch {
+                    parsedHref = null;
+                }
+
+                if (parsedHref && ['http:', 'https:'].includes(parsedHref.protocol)) {
+                    const link = document.createElement('a');
+                    link.href = parsedHref.href;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    link.textContent = label;
+                    parent.appendChild(link);
+                } else {
+                    parent.appendChild(document.createTextNode(match[0]));
+                }
+            }
+
+            lastIndex = tokenPattern.lastIndex;
+        }
+
+        parent.appendChild(document.createTextNode(text.slice(lastIndex)));
+    }
+
+    function renderMarkdown(parent, text) {
+        let paragraph = [];
+        let list = null;
+
+        function flushParagraph() {
+            if (!paragraph.length) return;
+            const element = document.createElement('p');
+            paragraph.forEach((line, index) => {
+                if (index) element.appendChild(document.createElement('br'));
+                appendInlineMarkdown(element, line);
+            });
+            parent.appendChild(element);
+            paragraph = [];
+        }
+
+        function flushList() {
+            list = null;
+        }
+
+        String(text).split(/\r?\n/).forEach(line => {
+            const listItem = line.match(/^\s*(?:([-*+])|(\d+)\.)\s+(.+)$/);
+            if (listItem) {
+                flushParagraph();
+                const listTag = listItem[2] ? 'ol' : 'ul';
+                if (!list || list.tagName.toLowerCase() !== listTag) {
+                    list = document.createElement(listTag);
+                    parent.appendChild(list);
+                }
+                const item = document.createElement('li');
+                appendInlineMarkdown(item, listItem[3]);
+                list.appendChild(item);
+            } else if (line.trim()) {
+                flushList();
+                paragraph.push(line);
+            } else {
+                flushParagraph();
+                flushList();
+            }
+        });
+
+        flushParagraph();
+    }
+
+    function appendMessage(role, content) {
+        const box = document.getElementById('chat-box');
+        const div = document.createElement('div');
+        div.className = 'msg msg-' + role;
+        if (role === 'user') {
+            div.innerHTML = '<strong>You:</strong> ' + escapeHtml(content);
+        } else if (role === 'error') {
+            div.innerHTML = '<i class="material-icons" style="font-size:16px;vertical-align:middle;">error_outline</i> ' + escapeHtml(content);
+        } else {
+            const heading = document.createElement('strong');
+            heading.textContent = 'AI:';
+            div.appendChild(heading);
+            renderMarkdown(div, content);
+        }
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    function showTyping() {
+        const box = document.getElementById('chat-box');
+        const div = document.createElement('div');
+        div.className = 'msg msg-typing';
+        div.id = 'typing-indicator';
+        div.innerHTML = '<i class="material-icons" style="font-size:16px;vertical-align:middle;">more_horiz</i> AI is thinking…';
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    function removeTyping() {
+        const el = document.getElementById('typing-indicator');
+        if (el) el.remove();
+    }
+
+    function renderApprovalCard(payload) {
+        const box = document.getElementById('chat-box');
+        const card = document.createElement('div');
+        card.className = 'approval-card';
+        const payloadStr = JSON.stringify(payload.data, null, 2);
+        card.innerHTML = `
+            <h3>
+                <i class="material-icons" style="font-size:18px;vertical-align:middle;color:#e67e22;">warning</i>
+                Action Requires Your Approval
+            </h3>
+            <p><strong>Action:</strong> ${escapeHtml(payload.action)}</p>
+            <p><strong>Details:</strong></p>
+            <pre>${escapeHtml(payloadStr)}</pre>
+            <div class="approval-actions">
+                <button class="btn-approve" onclick="handleDecision('approved', this.closest('.approval-card'))">
+                    <i class="material-icons" style="font-size:16px;">check_circle</i> Approve
+                </button>
+                <button class="btn-reject" onclick="handleDecision('rejected', this.closest('.approval-card'))">
+                    <i class="material-icons" style="font-size:16px;">cancel</i> Reject
+                </button>
+            </div>
+        `;
+        box.appendChild(card);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    async function sendMessage() {
+        const input = document.getElementById('chat-input');
+        const sendBtn = document.getElementById('send-btn');
+        const message = input.value.trim();
+        if (!message) return;
+
+        appendMessage('user', message);
+        input.value = '';
+        sendBtn.disabled = true;
+        showTyping();
+
+        try {
+            const response = await fetch('/api/ai/chat/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({message: message, thread_id: currentThreadId})
+            });
+            removeTyping();
+            const data = await response.json();
+
+            if (!response.ok) {
+                appendMessage('error', data.message || data.detail || 'Server error (' + response.status + ')');
+                return;
+            }
+
+            if (data.thread_id) currentThreadId = data.thread_id;
+
+            if (data.status === 'pending_approval') {
+                renderApprovalCard(data.payload);
+            } else {
+                appendMessage('ai', data.message || data.detail || '(No response)');
+            }
+        } catch (err) {
+            removeTyping();
+            appendMessage('error', 'Network error: ' + err.message);
+        } finally {
+            sendBtn.disabled = false;
+            input.focus();
+        }
+    }
+
+    async function handleDecision(decision, cardElement) {
+        const buttons = cardElement.querySelectorAll('button');
+        buttons.forEach(b => b.disabled = true);
+        cardElement.style.opacity = '0.6';
+
+        try {
+            const response = await fetch('/api/ai/approve/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({thread_id: currentThreadId, decision: decision})
+            });
+            const data = await response.json();
+            const msg = data.message || data.detail || (response.ok ? 'Done.' : 'Request failed.');
+            appendMessage('ai', '[System] ' + msg);
+        } catch (err) {
+            appendMessage('error', 'Approval error: ' + err.message);
+        }
+    }
+</script>
+{% endblock %}
