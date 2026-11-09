@@ -1,0 +1,1907 @@
+{
+    "ContinentalRegion": {
+        "description": "The ContinentalRegion model (Continental region) has the following fields: id (AutoField), name (CharField)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "name",
+                "type": "CharField",
+                "required": true
+            }
+        ]
+    },
+    "SubRegion": {
+        "description": "The SubRegion model (Subregion) has the following fields: id (AutoField), name (CharField), continental_region (ForeignKey)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "name",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "continental_region",
+                "type": "ForeignKey",
+                "required": true
+            }
+        ]
+    },
+    "IntermediaryRegion": {
+        "description": "The IntermediaryRegion model (Intermediary region) has the following fields: id (AutoField), name (CharField), subregion (ForeignKey)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "name",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "subregion",
+                "type": "ForeignKey",
+                "required": true
+            }
+        ]
+    },
+    "Country": {
+        "description": "The Country model (Country) has the following fields: id (AutoField), name (CharField), alternative_names (CharField), url_name (SlugField), subregion (ForeignKey), intermediary_region (ForeignKey), owner (ForeignKey), iso_code (CharField), phone_code (CharField), currency (CharField), notes (TextField)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "name",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "alternative_names",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "url_name",
+                "type": "SlugField",
+                "required": true
+            },
+            {
+                "name": "subregion",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "intermediary_region",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "owner",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "iso_code",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "phone_code",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "currency",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "notes",
+                "type": "TextField",
+                "required": false
+            }
+        ]
+    },
+    "City": {
+        "description": "The City model (City) has the following fields: id (AutoField), name (CharField), alternative_names (CharField), country (ForeignKey)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "name",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "alternative_names",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "country",
+                "type": "ForeignKey",
+                "required": true
+            }
+        ]
+    },
+    "ClientType": {
+        "description": "The ClientType model (Type of Clients) has the following fields: id (AutoField), name (CharField), department (ForeignKey)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "name",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "department",
+                "type": "ForeignKey",
+                "required": true
+            }
+        ]
+    },
+    "Industry": {
+        "description": "The Industry model (Industry of Clients) has the following fields: id (AutoField), name (CharField), department (ForeignKey)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "name",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "department",
+                "type": "ForeignKey",
+                "required": true
+            }
+        ]
+    },
+    "Stage": {
+        "description": "The Stage model (Stage) has the following fields: id (AutoField), name (CharField), department (ForeignKey), default (BooleanField), index_number (SmallIntegerField), second_default (BooleanField), success_stage (BooleanField), conditional_success_stage (BooleanField), goods_shipped (BooleanField)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "name",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "department",
+                "type": "ForeignKey",
+                "required": true
+            },
+            {
+                "name": "default",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "index_number",
+                "type": "SmallIntegerField",
+                "required": true
+            },
+            {
+                "name": "second_default",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "success_stage",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "conditional_success_stage",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "goods_shipped",
+                "type": "BooleanField",
+                "required": true
+            }
+        ]
+    },
+    "LeadSource": {
+        "description": "The LeadSource model (Lead Source) has the following fields: id (AutoField), name (CharField), department (ForeignKey), email (CharField), uuid (UUIDField), form_template (CharField), success_template (CharField)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "name",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "department",
+                "type": "ForeignKey",
+                "required": true
+            },
+            {
+                "name": "email",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "uuid",
+                "type": "UUIDField",
+                "required": true
+            },
+            {
+                "name": "form_template",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "success_template",
+                "type": "CharField",
+                "required": false
+            }
+        ]
+    },
+    "ClosingReason": {
+        "description": "The ClosingReason model (Closing reason) has the following fields: id (AutoField), department (ForeignKey), name (CharField), index_number (SmallIntegerField), success_reason (BooleanField)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "department",
+                "type": "ForeignKey",
+                "required": true
+            },
+            {
+                "name": "name",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "index_number",
+                "type": "SmallIntegerField",
+                "required": true
+            },
+            {
+                "name": "success_reason",
+                "type": "BooleanField",
+                "required": true
+            }
+        ]
+    },
+    "Currency": {
+        "description": "The Currency model (Currency) has the following fields: id (AutoField), name (CharField), rate_to_state_currency (DecimalField), rate_to_marketing_currency (DecimalField), is_state_currency (BooleanField), is_marketing_currency (BooleanField), auto_update (BooleanField), update_date (DateTimeField)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "name",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "rate_to_state_currency",
+                "type": "DecimalField",
+                "required": true
+            },
+            {
+                "name": "rate_to_marketing_currency",
+                "type": "DecimalField",
+                "required": true
+            },
+            {
+                "name": "is_state_currency",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "is_marketing_currency",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "auto_update",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "update_date",
+                "type": "DateTimeField",
+                "required": false
+            }
+        ]
+    },
+    "Payment": {
+        "description": "The Payment model (Payment) has the following fields: id (AutoField), amount (DecimalField), currency (ForeignKey), deal (ForeignKey), payment_date (DateField), status (CharField), contract_number (CharField), invoice_number (CharField), order_number (CharField), through_representation (BooleanField)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "amount",
+                "type": "DecimalField",
+                "required": true
+            },
+            {
+                "name": "currency",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "deal",
+                "type": "ForeignKey",
+                "required": true
+            },
+            {
+                "name": "payment_date",
+                "type": "DateField",
+                "required": true
+            },
+            {
+                "name": "status",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "contract_number",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "invoice_number",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "order_number",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "through_representation",
+                "type": "BooleanField",
+                "required": true
+            }
+        ]
+    },
+    "Rate": {
+        "description": "The Rate model (Currency rate) has the following fields: id (AutoField), currency (ForeignKey), payment_date (DateField), rate_to_state_currency (DecimalField), rate_to_marketing_currency (DecimalField), rate_type (CharField)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "currency",
+                "type": "ForeignKey",
+                "required": true
+            },
+            {
+                "name": "payment_date",
+                "type": "DateField",
+                "required": true
+            },
+            {
+                "name": "rate_to_state_currency",
+                "type": "DecimalField",
+                "required": true
+            },
+            {
+                "name": "rate_to_marketing_currency",
+                "type": "DecimalField",
+                "required": true
+            },
+            {
+                "name": "rate_type",
+                "type": "CharField",
+                "required": true
+            }
+        ]
+    },
+    "Lead": {
+        "description": "The Lead model (Lead) has the following fields: id (AutoField), creation_date (DateTimeField), update_date (DateTimeField), modified_by (ForeignKey), department (ForeignKey), first_name (CharField), middle_name (CharField), last_name (CharField), title (CharField), sex (CharField), birth_date (DateField), secondary_email (CharField), phone (CharField), other_phone (CharField), mobile (CharField), city_name (CharField), city (ForeignKey), country (ForeignKey), avatar (FileField), address (TextField), region (CharField), district (CharField), description (TextField), email (CharField), lead_source (ForeignKey), massmail (BooleanField), token (CharField), was_in_touch (DateField), owner (ForeignKey), disqualified (BooleanField), company_name (CharField), website (CharField), company_phone (CharField), company_address (TextField), company_email (CharField), type (ForeignKey), contact (ForeignKey), company (ForeignKey)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "creation_date",
+                "type": "DateTimeField",
+                "required": true
+            },
+            {
+                "name": "update_date",
+                "type": "DateTimeField",
+                "required": false
+            },
+            {
+                "name": "modified_by",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "department",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "first_name",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "middle_name",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "last_name",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "title",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "sex",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "birth_date",
+                "type": "DateField",
+                "required": false
+            },
+            {
+                "name": "secondary_email",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "phone",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "other_phone",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "mobile",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "city_name",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "city",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "country",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "avatar",
+                "type": "FileField",
+                "required": false
+            },
+            {
+                "name": "address",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "region",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "district",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "description",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "email",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "lead_source",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "massmail",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "token",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "was_in_touch",
+                "type": "DateField",
+                "required": false
+            },
+            {
+                "name": "owner",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "disqualified",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "company_name",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "website",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "company_phone",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "company_address",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "company_email",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "type",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "contact",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "company",
+                "type": "ForeignKey",
+                "required": false
+            }
+        ]
+    },
+    "Contact": {
+        "description": "The Contact model (Contact person) has the following fields: id (AutoField), creation_date (DateTimeField), update_date (DateTimeField), modified_by (ForeignKey), department (ForeignKey), first_name (CharField), middle_name (CharField), last_name (CharField), title (CharField), sex (CharField), birth_date (DateField), secondary_email (CharField), phone (CharField), other_phone (CharField), mobile (CharField), city_name (CharField), city (ForeignKey), country (ForeignKey), avatar (FileField), address (TextField), region (CharField), district (CharField), description (TextField), disqualified (BooleanField), email (CharField), lead_source (ForeignKey), massmail (BooleanField), token (CharField), was_in_touch (DateField), owner (ForeignKey), company (ForeignKey)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "creation_date",
+                "type": "DateTimeField",
+                "required": true
+            },
+            {
+                "name": "update_date",
+                "type": "DateTimeField",
+                "required": false
+            },
+            {
+                "name": "modified_by",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "department",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "first_name",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "middle_name",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "last_name",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "title",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "sex",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "birth_date",
+                "type": "DateField",
+                "required": false
+            },
+            {
+                "name": "secondary_email",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "phone",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "other_phone",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "mobile",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "city_name",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "city",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "country",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "avatar",
+                "type": "FileField",
+                "required": false
+            },
+            {
+                "name": "address",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "region",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "district",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "description",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "disqualified",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "email",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "lead_source",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "massmail",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "token",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "was_in_touch",
+                "type": "DateField",
+                "required": false
+            },
+            {
+                "name": "owner",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "company",
+                "type": "ForeignKey",
+                "required": true
+            }
+        ]
+    },
+    "Deal": {
+        "description": "The Deal model (Deal) has the following fields: id (AutoField), creation_date (DateTimeField), update_date (DateTimeField), owner (ForeignKey), modified_by (ForeignKey), department (ForeignKey), name (CharField), next_step (CharField), next_step_date (DateField), description (TextField), workflow (TextField), stage (ForeignKey), stages_dates (TextField), closing_date (DateField), win_closing_date (DateTimeField), amount (DecimalField), currency (ForeignKey), closing_reason (ForeignKey), probability (PositiveSmallIntegerField), ticket (CharField), city (ForeignKey), country (ForeignKey), lead (ForeignKey), contact (ForeignKey), request (ForeignKey), company (ForeignKey), partner_contact (ForeignKey), relevant (BooleanField), active (BooleanField), important (BooleanField), is_new (BooleanField), remind_me (BooleanField), co_owner (ForeignKey), tier_name (ForeignKey), discount_type (CharField), discount_value (DecimalField)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "creation_date",
+                "type": "DateTimeField",
+                "required": true
+            },
+            {
+                "name": "update_date",
+                "type": "DateTimeField",
+                "required": false
+            },
+            {
+                "name": "owner",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "modified_by",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "department",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "name",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "next_step",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "next_step_date",
+                "type": "DateField",
+                "required": true
+            },
+            {
+                "name": "description",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "workflow",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "stage",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "stages_dates",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "closing_date",
+                "type": "DateField",
+                "required": false
+            },
+            {
+                "name": "win_closing_date",
+                "type": "DateTimeField",
+                "required": false
+            },
+            {
+                "name": "amount",
+                "type": "DecimalField",
+                "required": false
+            },
+            {
+                "name": "currency",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "closing_reason",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "probability",
+                "type": "PositiveSmallIntegerField",
+                "required": false
+            },
+            {
+                "name": "ticket",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "city",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "country",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "lead",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "contact",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "request",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "company",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "partner_contact",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "relevant",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "active",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "important",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "is_new",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "remind_me",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "co_owner",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "tier_name",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "discount_type",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "discount_value",
+                "type": "DecimalField",
+                "required": false
+            }
+        ]
+    },
+    "CrmEmail": {
+        "description": "The CrmEmail model (Email) has the following fields: id (AutoField), creation_date (DateTimeField), update_date (DateTimeField), owner (ForeignKey), modified_by (ForeignKey), department (ForeignKey), subject (CharField), content (TextField), signature (ForeignKey), prev_corr (TextField), is_html (BooleanField), to (TextField), from_field (CharField), cc (TextField), bcc (TextField), sent (BooleanField), incoming (BooleanField), trash (BooleanField), inquiry (BooleanField), read_receipt (BooleanField), deal (ForeignKey), lead (ForeignKey), contact (ForeignKey), company (ForeignKey), request (ForeignKey), uid (PositiveIntegerField), imap_host (CharField), email_host_user (CharField), ticket (CharField), message_id (CharField), no_reply_needed (BooleanField)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "creation_date",
+                "type": "DateTimeField",
+                "required": true
+            },
+            {
+                "name": "update_date",
+                "type": "DateTimeField",
+                "required": false
+            },
+            {
+                "name": "owner",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "modified_by",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "department",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "subject",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "content",
+                "type": "TextField",
+                "required": true
+            },
+            {
+                "name": "signature",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "prev_corr",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "is_html",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "to",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "from_field",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "cc",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "bcc",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "sent",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "incoming",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "trash",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "inquiry",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "read_receipt",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "deal",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "lead",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "contact",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "company",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "request",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "uid",
+                "type": "PositiveIntegerField",
+                "required": false
+            },
+            {
+                "name": "imap_host",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "email_host_user",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "ticket",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "message_id",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "no_reply_needed",
+                "type": "BooleanField",
+                "required": true
+            }
+        ]
+    },
+    "Company": {
+        "description": "The Company model (Company) has the following fields: id (AutoField), creation_date (DateTimeField), update_date (DateTimeField), modified_by (ForeignKey), department (ForeignKey), address (TextField), region (CharField), district (CharField), description (TextField), disqualified (BooleanField), email (CharField), lead_source (ForeignKey), massmail (BooleanField), token (CharField), was_in_touch (DateField), owner (ForeignKey), full_name (CharField), alternative_names (CharField), website (CharField), active (BooleanField), phone (CharField), city_name (CharField), city (ForeignKey), registration_number (CharField), country (ForeignKey), type (ForeignKey), logo (FileField)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "creation_date",
+                "type": "DateTimeField",
+                "required": true
+            },
+            {
+                "name": "update_date",
+                "type": "DateTimeField",
+                "required": false
+            },
+            {
+                "name": "modified_by",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "department",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "address",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "region",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "district",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "description",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "disqualified",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "email",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "lead_source",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "massmail",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "token",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "was_in_touch",
+                "type": "DateField",
+                "required": false
+            },
+            {
+                "name": "owner",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "full_name",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "alternative_names",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "website",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "active",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "phone",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "city_name",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "city",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "registration_number",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "country",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "type",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "logo",
+                "type": "FileField",
+                "required": false
+            }
+        ]
+    },
+    "Request": {
+        "description": "The Request model (Request) has the following fields: id (AutoField), creation_date (DateTimeField), update_date (DateTimeField), owner (ForeignKey), modified_by (ForeignKey), department (ForeignKey), request_for (CharField), first_name (CharField), middle_name (CharField), last_name (CharField), email (CharField), phone (CharField), website (CharField), lead_source (ForeignKey), utm_source (CharField), utm_medium (CharField), utm_campaign (CharField), utm_term (CharField), utm_content (CharField), gclid (CharField), fbclid (CharField), company_name (CharField), receipt_date (DateField), lead (ForeignKey), contact (ForeignKey), company (ForeignKey), deal (ForeignKey), country (ForeignKey), city (ForeignKey), city_name (CharField), description (TextField), translation (TextField), remark (TextField), pending (BooleanField), subsequent (BooleanField), duplicate (BooleanField), verification_required (BooleanField), case (BooleanField), ticket (CharField), co_owner (ForeignKey)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "creation_date",
+                "type": "DateTimeField",
+                "required": true
+            },
+            {
+                "name": "update_date",
+                "type": "DateTimeField",
+                "required": false
+            },
+            {
+                "name": "owner",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "modified_by",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "department",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "request_for",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "first_name",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "middle_name",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "last_name",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "email",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "phone",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "website",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "lead_source",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "utm_source",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "utm_medium",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "utm_campaign",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "utm_term",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "utm_content",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "gclid",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "fbclid",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "company_name",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "receipt_date",
+                "type": "DateField",
+                "required": false
+            },
+            {
+                "name": "lead",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "contact",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "company",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "deal",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "country",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "city",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "city_name",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "description",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "translation",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "remark",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "pending",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "subsequent",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "duplicate",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "verification_required",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "case",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "ticket",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "co_owner",
+                "type": "ForeignKey",
+                "required": false
+            }
+        ]
+    },
+    "Tag": {
+        "description": "The Tag model (Tag) has the following fields: id (AutoField), creation_date (DateTimeField), update_date (DateTimeField), owner (ForeignKey), modified_by (ForeignKey), department (ForeignKey), name (CharField)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "creation_date",
+                "type": "DateTimeField",
+                "required": true
+            },
+            {
+                "name": "update_date",
+                "type": "DateTimeField",
+                "required": false
+            },
+            {
+                "name": "owner",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "modified_by",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "department",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "name",
+                "type": "CharField",
+                "required": true
+            }
+        ]
+    },
+    "ProductCategory": {
+        "description": "The ProductCategory model (Product category) has the following fields: id (AutoField), creation_date (DateTimeField), update_date (DateTimeField), department (ForeignKey), name (CharField), description (TextField)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "creation_date",
+                "type": "DateTimeField",
+                "required": true
+            },
+            {
+                "name": "update_date",
+                "type": "DateTimeField",
+                "required": false
+            },
+            {
+                "name": "department",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "name",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "description",
+                "type": "TextField",
+                "required": false
+            }
+        ]
+    },
+    "Product": {
+        "description": "The Product model (Product) has the following fields: id (AutoField), creation_date (DateTimeField), update_date (DateTimeField), modified_by (ForeignKey), department (ForeignKey), name (CharField), description (TextField), price (DecimalField), currency (ForeignKey), on_sale (BooleanField), type (CharField), product_category (ForeignKey), main_image (FileField)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "creation_date",
+                "type": "DateTimeField",
+                "required": true
+            },
+            {
+                "name": "update_date",
+                "type": "DateTimeField",
+                "required": false
+            },
+            {
+                "name": "modified_by",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "department",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "name",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "description",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "price",
+                "type": "DecimalField",
+                "required": false
+            },
+            {
+                "name": "currency",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "on_sale",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "type",
+                "type": "CharField",
+                "required": false
+            },
+            {
+                "name": "product_category",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "main_image",
+                "type": "FileField",
+                "required": false
+            }
+        ]
+    },
+    "Output": {
+        "description": "The Output model (Output) has the following fields: id (AutoField), amount (DecimalField), currency (ForeignKey), deal (ForeignKey), product (ForeignKey), quantity (PositiveSmallIntegerField), shipping_date (DateField), planned_shipping_date (DateField), actual_shipping_date (DateField), product_is_shipped (BooleanField), serial_number (CharField)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "amount",
+                "type": "DecimalField",
+                "required": true
+            },
+            {
+                "name": "currency",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "deal",
+                "type": "ForeignKey",
+                "required": true
+            },
+            {
+                "name": "product",
+                "type": "ForeignKey",
+                "required": true
+            },
+            {
+                "name": "quantity",
+                "type": "PositiveSmallIntegerField",
+                "required": true
+            },
+            {
+                "name": "shipping_date",
+                "type": "DateField",
+                "required": false
+            },
+            {
+                "name": "planned_shipping_date",
+                "type": "DateField",
+                "required": false
+            },
+            {
+                "name": "actual_shipping_date",
+                "type": "DateField",
+                "required": false
+            },
+            {
+                "name": "product_is_shipped",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "serial_number",
+                "type": "CharField",
+                "required": false
+            }
+        ]
+    },
+    "Shipment": {
+        "description": "The Shipment model (Shipment) has the following fields: id (AutoField), amount (DecimalField), currency (ForeignKey), deal (ForeignKey), product (ForeignKey), quantity (PositiveSmallIntegerField), shipping_date (DateField), planned_shipping_date (DateField), actual_shipping_date (DateField), product_is_shipped (BooleanField), serial_number (CharField)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "amount",
+                "type": "DecimalField",
+                "required": true
+            },
+            {
+                "name": "currency",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "deal",
+                "type": "ForeignKey",
+                "required": true
+            },
+            {
+                "name": "product",
+                "type": "ForeignKey",
+                "required": true
+            },
+            {
+                "name": "quantity",
+                "type": "PositiveSmallIntegerField",
+                "required": true
+            },
+            {
+                "name": "shipping_date",
+                "type": "DateField",
+                "required": false
+            },
+            {
+                "name": "planned_shipping_date",
+                "type": "DateField",
+                "required": false
+            },
+            {
+                "name": "actual_shipping_date",
+                "type": "DateField",
+                "required": false
+            },
+            {
+                "name": "product_is_shipped",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "serial_number",
+                "type": "CharField",
+                "required": false
+            }
+        ]
+    },
+    "CategoryPriceRule": {
+        "description": "The CategoryPriceRule model (Category Price Rule) has the following fields: id (AutoField), price_type (CharField), tier_name (ForeignKey), base_tier (BooleanField), percentage (DecimalField), update_date (DateTimeField), modified_by (ForeignKey), category (ForeignKey)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "price_type",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "tier_name",
+                "type": "ForeignKey",
+                "required": true
+            },
+            {
+                "name": "base_tier",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "percentage",
+                "type": "DecimalField",
+                "required": false
+            },
+            {
+                "name": "update_date",
+                "type": "DateTimeField",
+                "required": false
+            },
+            {
+                "name": "modified_by",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "category",
+                "type": "ForeignKey",
+                "required": true
+            }
+        ]
+    },
+    "DepartmentPriceRule": {
+        "description": "The DepartmentPriceRule model (Department Price Rule) has the following fields: id (AutoField), price_type (CharField), tier_name (ForeignKey), base_tier (BooleanField), percentage (DecimalField), update_date (DateTimeField), modified_by (ForeignKey), department (ForeignKey)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "price_type",
+                "type": "CharField",
+                "required": true
+            },
+            {
+                "name": "tier_name",
+                "type": "ForeignKey",
+                "required": true
+            },
+            {
+                "name": "base_tier",
+                "type": "BooleanField",
+                "required": true
+            },
+            {
+                "name": "percentage",
+                "type": "DecimalField",
+                "required": false
+            },
+            {
+                "name": "update_date",
+                "type": "DateTimeField",
+                "required": false
+            },
+            {
+                "name": "modified_by",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "department",
+                "type": "ForeignKey",
+                "required": true
+            }
+        ]
+    },
+    "ProductPriceTier": {
+        "description": "The ProductPriceTier model (Product Price Tier) has the following fields: id (AutoField), creation_date (DateTimeField), update_date (DateTimeField), owner (ForeignKey), modified_by (ForeignKey), department (ForeignKey), tier_name (ForeignKey), price (DecimalField), description (TextField), product (ForeignKey), min_quantity (PositiveIntegerField), valid_from (DateField), valid_to (DateField)",
+        "fields": [
+            {
+                "name": "id",
+                "type": "AutoField",
+                "required": false
+            },
+            {
+                "name": "creation_date",
+                "type": "DateTimeField",
+                "required": true
+            },
+            {
+                "name": "update_date",
+                "type": "DateTimeField",
+                "required": false
+            },
+            {
+                "name": "owner",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "modified_by",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "department",
+                "type": "ForeignKey",
+                "required": false
+            },
+            {
+                "name": "tier_name",
+                "type": "ForeignKey",
+                "required": true
+            },
+            {
+                "name": "price",
+                "type": "DecimalField",
+                "required": true
+            },
+            {
+                "name": "description",
+                "type": "TextField",
+                "required": false
+            },
+            {
+                "name": "product",
+                "type": "ForeignKey",
+                "required": true
+            },
+            {
+                "name": "min_quantity",
+                "type": "PositiveIntegerField",
+                "required": false
+            },
+            {
+                "name": "valid_from",
+                "type": "DateField",
+                "required": false
+            },
+            {
+                "name": "valid_to",
+                "type": "DateField",
+                "required": false
+            }
+        ]
+    }
+}

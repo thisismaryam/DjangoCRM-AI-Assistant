@@ -22,6 +22,7 @@ class TestSignaturePreview(BaseTestCase):
         cls.file_in_media = settings.MEDIA_ROOT / file_name
         cls.file_in_static = settings.STATIC_ROOT / file_name
         cls.file_in_media.write_text('P5 1 1 1\n\0')
+        cls.file_in_static.parent.mkdir(parents=True, exist_ok=True)
         cls.file_in_static.write_text('P5 1 1 1\n\0')
         cls.owner = USER_MODEL.objects.get(username="Andrew.Manager.Global")
         cls.department_id = get_department_id(cls.owner)
