@@ -1,8 +1,10 @@
 from django.shortcuts import render
 from django.contrib.admin import site as admin_site
 from django.contrib.admin.views.decorators import staff_member_required
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 
+@ensure_csrf_cookie
 @staff_member_required(login_url='/en/456-admin/login/')
 def chat_ui(request):
     # Build the same context dict Django Admin pages use

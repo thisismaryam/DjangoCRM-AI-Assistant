@@ -2,7 +2,13 @@ import json
 from pathlib import Path
 
 from langchain_core.tools import tool
+from langchain_core.runnables import RunnableConfig
 from langgraph.types import interrupt
+from ai_assistant.task_tools import (
+    _current_user,
+    _require_permission,
+    task_management_tools,
+)
 from ai_assistant.rag.search import search_schema
 from crm.models import Lead
 from django.contrib.auth import get_user_model
@@ -39,7 +45,15 @@ def search_database_schema(query: str) -> str:
 
 
 @tool
-def prepare_lead(first_name: str, email: str, company_name: str = "", last_name: str = "", phone: str = "") -> str:
+def prepare_lead(
+    first_name: str,
+    email: str,
+    company_name: str = "",
+    last_name: str = "",
+    phone: str = "",
+    *,
+    config: RunnableConfig,
+) -> str:
     """Useful for when the user asks to create a new lead. 
     Only use this when the user explicitly wants to add a new lead to the system."""
 
@@ -58,6 +72,9 @@ def prepare_lead(first_name: str, email: str, company_name: str = "", last_name:
         "phone": phone.strip()
     }
 
+    user = _current_user(config)
+    _require_permission(user, "crm.add_lead")
+
     # 1. Pause the graph and hand the data to the frontend
     user_decision = interrupt({
         "action": "CREATE_LEAD",
@@ -66,6 +83,8 @@ def prepare_lead(first_name: str, email: str, company_name: str = "", last_name:
 
     # 2. This line ONLY runs after the graph is resumed with Command(resume=...)
     if user_decision == "approved":
+        user = _current_user(config)
+        _require_permission(user, "crm.add_lead")
         try:
             # Check for duplicates first (case-insensitive)
             if Lead.objects.filter(email__iexact=lead_data["email"]).exists():
@@ -95,4 +114,7 @@ def prepare_lead(first_name: str, email: str, company_name: str = "", last_name:
         return "CANCELLED: The user rejected the creation of this lead."
 
 
-tools = [search_database_schema, prepare_lead]
+from ai_assistant.task_tools import task_management_tools
+
+
+tools = [search_database_schema, prepare_lead, *task_management_tools]
