@@ -100,6 +100,11 @@ remain the same if settings are changed.
    resume the graph into another pending approval before the workflow ends.
 6. On approval, the requested CRM object and associations are saved. A
    rejection cancels that proposed write without creating it.
+7. Project and task lookups require the corresponding Django view permission
+   and only return records associated with the signed-in user (unless the user
+   is a superuser). Writes require the relevant add permission, which is
+   checked again when the approval is resumed. Assignee lookups follow the
+   existing task-admin role rules.
 
 The browser renders bold text, simple ordered/unordered lists, and links in
 assistant messages. It builds DOM elements rather than inserting arbitrary
@@ -108,14 +113,15 @@ small Markdown subset, not a complete Markdown implementation.
 
 ### Conversation context and persistence
 
-Each conversation uses its own `thread_id`. LangGraph's SQLite saver persists
-graph state and paused approval steps in `checkpoints.sqlite`. A follow-up
-request must reuse the same thread ID to continue that conversation. Before
-each provider call, the agent retains at most the four most recent user turns
-and drops older complete turns when their serialized history exceeds 6,000
-characters. Schema tool results are limited to one model, at most 10
-name-and-type field entries, and 1,000 characters; model completions are
-limited to 512 tokens.
+Each conversation uses its own `thread_id`, namespaced by the authenticated
+user on the server. An approval can only resume a thread in that user's
+namespace. LangGraph's SQLite saver persists graph state and paused approval
+steps in `checkpoints.sqlite`. A follow-up request must reuse the same public
+thread ID to continue that conversation. Before each provider call, the agent
+retains at most the four most recent user turns and drops older complete turns
+when their serialized history exceeds 6,000 characters. Schema tool results
+are limited to one model, at most 10 name-and-type field entries, and 1,000
+characters; model completions are limited to 512 tokens.
 
 The SQLite checkpoint file still retains conversation state; treat it as
 application data, protect it from public access, and include it in
@@ -203,12 +209,13 @@ With the checked-in settings and English locale:
 | AI chat API | `POST http://127.0.0.1:8000/api/ai/chat/` |
 | AI approval API | `POST http://127.0.0.1:8000/api/ai/approve/` |
 
-The chat page requires a staff login. The chat and approval API views currently
-disable DRF authentication and permissions and are CSRF-exempt. **Do not expose
-these API endpoints to an untrusted network as-is.** Add and test appropriate
-authentication, authorization, CSRF protections, input validation, and
-request limits before production use. The assistant's prompt instructions and
-approval interaction are not substitutes for endpoint security.
+The chat page and both API endpoints require an authenticated session. The
+chat and approval APIs use Django REST Framework session authentication, so
+unsafe requests must include a valid CSRF token. Approval requests are
+restricted to the current user's namespaced conversation thread. Continue to
+follow Django's deployment guidance and review production-specific
+authentication, rate limiting, and operational requirements before exposing
+the application publicly.
 
 The development server serves static files for local work. For a production
 deployment, follow Django's deployment/static-files guidance rather than
@@ -216,8 +223,10 @@ relying on development static serving.
 
 ## Tests and checks
 
-Run Django's configuration checks and focused assistant tests from the
-repository root:
+Run Django's configuration checks and assistant tests from the repository
+root. The assistant tests cover schema retrieval limits, provider fallback,
+approval-gated task tools, permission checks, and authenticated thread
+isolation:
 
 ```powershell
 python manage.py check
