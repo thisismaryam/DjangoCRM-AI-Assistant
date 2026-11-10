@@ -8,7 +8,11 @@ from crm.models import Lead
 from django.contrib.auth import get_user_model
 
 
-SCHEMA_CATALOG_PATH = Path(__file__).resolve().parent / "data" / "schema_catalog.json"
+SCHEMA_CATALOG_PATH = Path(__file__).resolve().parent / \
+    "data" / "schema_catalog.json"
+MAX_SCHEMA_FIELDS = 10
+MAX_SCHEMA_RESULT_CHARS = 1000
+
 with SCHEMA_CATALOG_PATH.open(encoding="utf-8") as schema_file:
     SCHEMA_CATALOG = json.load(schema_file)
 
@@ -21,11 +25,17 @@ def search_database_schema(query: str) -> str:
         return "No matching database model was found."
 
     model_name = results[0]["model"]
-    return json.dumps(
-        {model_name: SCHEMA_CATALOG[model_name]},
-        separators=(",", ":"),
-        ensure_ascii=False,
-    )
+    lines = [f"Model: {model_name}", "Fields:"]
+    for field in SCHEMA_CATALOG[model_name]["fields"][:MAX_SCHEMA_FIELDS]:
+        field_line = f"- {field['name']}: {field['type']}"
+        if len("\n".join([*lines, field_line])) > MAX_SCHEMA_RESULT_CHARS:
+            omitted_line = "- Additional fields omitted to fit the context limit."
+            if len("\n".join([*lines, omitted_line])) <= MAX_SCHEMA_RESULT_CHARS:
+                lines.append(omitted_line)
+            break
+        lines.append(field_line)
+
+    return "\n".join(lines)
 
 
 @tool
@@ -75,7 +85,7 @@ def prepare_lead(first_name: str, email: str, company_name: str = "", last_name:
             )
             return (
                 f"SUCCESS: Lead for {new_lead.first_name} created. "
-                f"<a href='/en/123/crm/lead/{new_lead.id}/change/' "
+                f"<a href='/en/456-admin/crm/lead/{new_lead.id}/change/' "
                 f"target='_blank'>Click here to view the Lead in CRM</a>."
             )
 
