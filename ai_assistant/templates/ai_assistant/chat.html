@@ -317,6 +317,13 @@
         if (el) el.remove();
     }
 
+    function getCookie(name) {
+        const cookie = document.cookie
+            .split('; ')
+            .find(item => item.startsWith(name + '='));
+        return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : '';
+    }
+
     function renderApprovalCard(payload) {
         const box = document.getElementById('chat-box');
         const card = document.createElement('div');
@@ -357,7 +364,10 @@
         try {
             const response = await fetch('/api/ai/chat/', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
                 body: JSON.stringify({message: message, thread_id: currentThreadId})
             });
             removeTyping();
@@ -392,10 +402,18 @@
         try {
             const response = await fetch('/api/ai/approve/', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
                 body: JSON.stringify({thread_id: currentThreadId, decision: decision})
             });
             const data = await response.json();
+            if (data.thread_id) currentThreadId = data.thread_id;
+            if (data.status === 'pending_approval') {
+                renderApprovalCard(data.payload);
+                return;
+            }
             const msg = data.message || data.detail || (response.ok ? 'Done.' : 'Request failed.');
             appendMessage('ai', '[System] ' + msg);
         } catch (err) {
