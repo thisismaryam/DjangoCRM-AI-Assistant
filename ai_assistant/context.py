@@ -3,7 +3,7 @@ import json
 from langchain_core.messages import BaseMessage, HumanMessage
 
 
-MAX_HISTORY_TURNS = 4
+MAX_HISTORY_TURNS = 2
 MAX_HISTORY_CHARS = 6000
 
 

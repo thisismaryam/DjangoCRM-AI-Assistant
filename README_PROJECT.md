@@ -18,9 +18,8 @@ management, analytics, email and mailing tools, shared chat, reminders, and
 other business utilities.
 
 This checkout also includes an AI assistant. It can answer CRM schema
-questions using a local search index, prepare leads, and create projects,
-tasks, and subtasks with optional tags, assignees, and reminders. Each write
-pauses for explicit approval before changing the database.
+questions using a local search index and prepare leads for creation. Lead
+creation pauses for explicit approval before changing the database.
 The assistant is an addition to the CRM; it does not replace the regular
 admin interface or the CRM's existing permissions and business workflows.
 
@@ -35,7 +34,7 @@ admin interface or the CRM's existing permissions and business workflows.
 | `chat/` | Shared chat functionality used by CRM and task objects. |
 | `common/` | Shared models, views, utilities, templates, static assets, and Django Admin customizations. |
 | `help/`, `quality/`, `settings/`, `voip/` | Help content, quality-related features, site settings, and VoIP integrations. |
-| `ai_assistant/` | Gemini-first/Groq-fallback chat agent, schema search, lead and task-management tools, approval UI, and conversation checkpointing. |
+| `ai_assistant/` | Gemini-first/Groq-fallback chat agent, schema search, lead preparation, approval UI, and conversation checkpointing. |
 | `webcrm/` | Django project settings, root URL configuration, and application entry points. |
 | `templates/`, `static/`, `media/` | Shared templates, source static assets, and user-uploaded/runtime media. |
 | `tests/` | Tests for the CRM applications and workflows. |
@@ -69,12 +68,11 @@ remain the same if settings are changed.
 | `ai_assistant/api_views.py` | Accepts chat requests and resumes approved/rejected conversations. |
 | `ai_assistant/agent.py` | Configures the LangGraph workflow and SQLite checkpoint saver. |
 | `ai_assistant/llm.py` | Configures Gemini-first model invocation and Groq fallback with tools bound to both. |
-| `ai_assistant/tools.py` | Implements schema lookup, lead preparation, and central tool registration. |
-| `ai_assistant/task_tools.py` | Implements read-only project/team/task lookup and approval-gated project/task/subtask creation. |
+| `ai_assistant/tools.py` | Implements schema lookup, lead preparation, company preparation, and tool registration. |
 | `ai_assistant/rag/` | Embeds schema descriptions and searches a FAISS vector index. |
 | `ai_assistant/data/schema_catalog.json` | Extracted CRM model field names, types, and required flags. |
 | `ai_assistant/data/index_metadata.json` and `vector.index` | Maps indexed vectors to model names and stores the FAISS index. |
-| `ai_assistant/tests.py` | Focused tests for schema results and the created-lead link. |
+| `ai_assistant/tests.py` | Focused tests for schema results, lead preparation, provider fallback, and approval APIs. |
 | `checkpoints.sqlite` | LangGraph conversation state and interrupted approvals, created at runtime. |
 
 ### Chat and tool workflow
@@ -83,28 +81,33 @@ remain the same if settings are changed.
    `POST /api/ai/chat/`.
 2. The LangGraph agent sends the conversation to Gemini first and falls back
    to Groq if Gemini raises an error. Both models receive the same registered
-   tools. The system prompt directs schema questions to the schema tool, lead
-   requests to the lead tool, and project/task requests through the staged
-   Project → Task → Subtask workflow.
+   tools: `search_database_schema`, `prepare_lead`, `prepare_company`, and
+   `list_departments`. The system prompt directs schema questions to schema
+   search and only prepares leads or companies when the user explicitly asks
+   to create them.
 3. For a schema question, the tool embeds the query, searches the CRM schema
    index, and returns the highest-ranked model with at most 10 field names and
    types. Keeping the response compact limits irrelevant context; semantic
    search can still select the wrong model, so verify important answers
    against the CRM code or database.
-4. For project/task work, read-only tools resolve project names, task IDs,
-   and team-member usernames. The agent calls `prepare_project`,
-   `prepare_task`, and `prepare_subtask` separately and in hierarchy order.
-   The tools support tags, assignees, and reminders.
-5. Every `prepare_*` write tool pauses the graph and returns its proposed data
-   to the UI. The user approves or rejects each proposal; each approval can
-   resume the graph into another pending approval before the workflow ends.
-6. On approval, the requested CRM object and associations are saved. A
-   rejection cancels that proposed write without creating it.
-7. Project and task lookups require the corresponding Django view permission
-   and only return records associated with the signed-in user (unless the user
-   is a superuser). Writes require the relevant add permission, which is
-   checked again when the approval is resumed. Assignee lookups follow the
-   existing task-admin role rules.
+4. For an explicit lead-creation request, `prepare_lead` proposes the lead
+   details and pauses the graph. The user approves or rejects the proposal in
+   the UI; approval saves the lead, while rejection leaves the database
+   unchanged. The lead permission is checked before and after approval.
+5. For an explicit company-creation request, `prepare_company` uses the company
+   name and any supplied details. Email may be part of the conversation but is
+   not a company field and is not saved with the Company record. The tool reuses
+   matching Country, City, and ClientType records, and proposes creating
+   supplied related names that are missing. A city requires a country;
+   `list_departments` reports the user's departments. Creating a missing
+   ClientType requires exactly one department associated with the user;
+   otherwise the tool returns a clear error without creating the company.
+   Company and missing related records are written together only after
+   approval. Rejection creates none of them.
+6. The approval endpoint resumes only the current authenticated user's
+   namespaced conversation. The assistant does not provide project or task
+   management tools; those CRM features remain available through the regular
+   application interfaces.
 
 The browser renders bold text, simple ordered/unordered lists, and links in
 assistant messages. It builds DOM elements rather than inserting arbitrary
@@ -118,8 +121,11 @@ user on the server. An approval can only resume a thread in that user's
 namespace. LangGraph's SQLite saver persists graph state and paused approval
 steps in `checkpoints.sqlite`. A follow-up request must reuse the same public
 thread ID to continue that conversation. Before each provider call, the agent
-retains at most the four most recent user turns and drops older complete turns
-when their serialized history exceeds 6,000 characters. Schema tool results
+retains at most the two most recent user turns (including their associated
+assistant and tool messages) and drops older complete turns when their
+serialized history exceeds 6,000 characters. The prompt directs the agent to
+interpret short replies using the recent exchange and restate collected company
+details when asking follow-up questions. Schema tool results
 are limited to one model, at most 10 name-and-type field entries, and 1,000
 characters; model completions are limited to 512 tokens.
 
@@ -177,9 +183,9 @@ For a typical local SQLite development setup:
    your deployment to its dependency manifest so another developer can
    reproduce the environment.
 5. Add `GEMINI_API_KEY` and `GROQ_API_KEY` values to a local `.env` file in
-   the project root. Gemini (`gemini-3.8-flash`) is tried first and Groq is
-   used automatically if Gemini fails. `.env` is ignored by Git; do not
-   commit API keys.
+   the project root. Gemini (`gemini-2.5-flash`) is tried first and Groq
+   (`openai/gpt-oss-20b`) is used automatically if Gemini fails. `.env` is
+   ignored by Git; do not commit API keys.
 6. Apply migrations and create a login:
 
    ```powershell
@@ -224,9 +230,9 @@ relying on development static serving.
 ## Tests and checks
 
 Run Django's configuration checks and assistant tests from the repository
-root. The assistant tests cover schema retrieval limits, provider fallback,
-approval-gated task tools, permission checks, and authenticated thread
-isolation:
+root. The assistant tests cover schema retrieval limits, lead and company
+preparation, provider fallback, tool registration, approval handling, and
+authenticated thread isolation:
 
 ```powershell
 python manage.py check

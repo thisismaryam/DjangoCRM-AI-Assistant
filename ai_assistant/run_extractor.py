@@ -46,4 +46,3 @@ with open(output_path, 'w') as f:
     json.dump(schema_catalog, f, indent=4)
 
 print(f"SUCCESS! Saved {len(schema_catalog)} models to {output_path}")
-``
