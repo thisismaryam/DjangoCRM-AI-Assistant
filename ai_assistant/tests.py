@@ -1,39 +1,40 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.contrib.auth.models import Permission
-from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError
-from django.utils import timezone
+from django.test import TestCase
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableLambda
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from ai_assistant.api_views import approve_view, chat_view
-from ai_assistant.context import MAX_HISTORY_CHARS, trim_conversation_history
-from ai_assistant.llm import build_fallback_llm
-from ai_assistant.task_tools import (
-    list_projects,
-    list_team_members,
-    list_tasks,
-    prepare_project,
-    prepare_subtask,
-    prepare_task,
+from ai_assistant.api_views import approve_view
+from ai_assistant.agent import agent_node
+from ai_assistant.context import (
+    MAX_HISTORY_CHARS,
+    MAX_HISTORY_TURNS,
+    trim_conversation_history,
 )
+from ai_assistant.llm import build_fallback_llm
+from common.models import Department
+from crm.models import City, ClientType, Company, Country
 from ai_assistant.tools import (
     MAX_SCHEMA_RESULT_CHARS,
+    list_departments,
+    prepare_company,
     prepare_lead,
     search_database_schema,
     tools,
 )
-from common.models import Reminder
-from tasks.models import Project, Task, TaskStage
 
 
 class TestAssistantTools(TestCase):
+    def setUp(self):
+        Group.objects.get_or_create(name="co-workers")
+
     @patch("ai_assistant.tools.SCHEMA_CATALOG")
     @patch(
         "ai_assistant.tools.search_schema",
@@ -100,6 +101,51 @@ class TestAssistantTools(TestCase):
         self.assertIsInstance(trimmed[1], AIMessage)
         self.assertIsInstance(trimmed[2], ToolMessage)
 
+    def test_context_trimming_retains_latest_two_user_turns_for_follow_up(self):
+        messages = [
+            HumanMessage(content="An older unrelated request"),
+            AIMessage(content="An older answer"),
+            HumanMessage(content="Create Northstar Labs in California."),
+            AIMessage(content="I have Northstar Labs in California. Which city?"),
+            HumanMessage(content="San Francisco"),
+        ]
+
+        trimmed = trim_conversation_history(messages)
+
+        self.assertEqual(MAX_HISTORY_TURNS, 2)
+        self.assertEqual(trimmed, messages[2:])
+
+    def test_agent_prompt_merges_brief_follow_up_with_recent_request(self):
+        messages = [
+            HumanMessage(content="Create Northstar Labs in California."),
+            AIMessage(content="I have Northstar Labs in California. Which city?"),
+            HumanMessage(content="San Francisco"),
+        ]
+
+        with patch("ai_assistant.agent.llm", autospec=True) as llm:
+            llm.invoke.return_value = AIMessage(
+                content="I will prepare Northstar Labs."
+            )
+            agent_node({"messages": messages})
+
+        prompt = llm.invoke.call_args.args[0]
+        self.assertEqual(prompt[1:], messages)
+        self.assertIn("Treat brief user replies as answers", prompt[0].content)
+        self.assertIn("Do NOT ask for an email", prompt[0].content)
+        self.assertIn(
+            "Call it as soon as the company name is known",
+            prompt[0].content,
+        )
+        self.assertIn("Do NOT ask for an email", prompt[0].content)
+        self.assertIn(
+            "Do NOT ask the user to confirm details before calling prepare_company",
+            prompt[0].content,
+        )
+        self.assertIn(
+            "repeat the tool's error message verbatim",
+            prompt[0].content,
+        )
+
     def test_approved_lead_result_contains_crm_deep_link(self):
         lead = type("LeadResult", (), {"id": 42, "first_name": "Ada"})()
         with (
@@ -128,185 +174,259 @@ class TestAssistantTools(TestCase):
             result,
         )
 
-
-class TestTaskManagementTools(TestCase):
-    def setUp(self):
-        Group.objects.get_or_create(name="co-workers")
-        self.user = get_user_model().objects.create_user(
-            username="task-user",
+    def test_company_creation_approves_and_creates_missing_related_records(self):
+        department = Department.objects.create(name="Company tool department")
+        user = get_user_model().objects.create_user(
+            username="company-tool-user",
             password="test-password",
         )
+        user.groups.add(department)
         permissions = Permission.objects.filter(
-            content_type__app_label="tasks",
+            content_type__app_label="crm",
             codename__in=(
-                "view_project",
-                "view_task",
-                "add_project",
-                "add_task",
+                "add_company",
+                "add_country",
+                "add_city",
+                "add_clienttype",
             ),
         )
-        self.user.user_permissions.add(*permissions)
-        self.config = {"configurable": {"user_id": self.user.pk}}
-        self.stage = TaskStage.objects.create(name="To do", default=True)
-        self.project = Project.objects.create(
-            name="CRM upgrade",
-            next_step="Review project progress",
-            next_step_date=timezone.localdate(),
-            owner=self.user,
-        )
+        user.user_permissions.add(*permissions)
 
-    def test_read_only_lookup_tools_do_not_interrupt(self):
-        with patch("ai_assistant.task_tools.interrupt") as interrupt:
-            list_projects.invoke({"query": "CRM"}, config=self.config)
-            list_team_members.invoke({"query": ""}, config=self.config)
-            list_tasks.invoke(
-                {"project_id": self.project.pk}, config=self.config
+        with patch(
+            "ai_assistant.tools.interrupt",
+            return_value="approved",
+        ) as interrupt:
+            result = prepare_company.invoke(
+                {
+                    "full_name": "Northstar Labs",
+                    "country_name": "New Zealand",
+                    "city_name": "Wellington",
+                    "type_name": "Strategic Partner",
+                    "phone": "+64 4 555 0100",
+                    "website": "https://northstar.example",
+                    "registration_number": "NZ-100",
+                },
+                config={"configurable": {"user_id": user.pk}},
             )
 
-        interrupt.assert_not_called()
-
-    @patch("ai_assistant.task_tools.interrupt", return_value="rejected")
-    def test_prepare_project_rejection_does_not_create_project(self, interrupt):
-        before = Project.objects.count()
-
-        result = prepare_project.invoke(
-            {"name": "Rejected project"},
-            config=self.config,
+        self.assertIn("SUCCESS", result, result)
+        country = Country.objects.get(name="New Zealand")
+        city = City.objects.get(name="Wellington", country=country)
+        client_type = ClientType.objects.get(
+            name="Strategic Partner",
+            department=department,
         )
-
-        self.assertIn("CANCELLED", result)
-        self.assertEqual(Project.objects.count(), before)
-        self.assertEqual(interrupt.call_count, 1)
-
-    @patch("ai_assistant.task_tools.interrupt", return_value="approved")
-    def test_prepare_project_applies_assignees_tags_and_reminder(self, interrupt):
-        result = prepare_project.invoke(
-            {
-                "name": "New CRM project",
-                "assignee_ids": [self.user.pk],
-                "tags": ["launch"],
-                "reminder_date": "2026-12-01",
-                "reminder_description": "Project checkpoint",
-            },
-            config=self.config,
+        company = Company.objects.get(full_name="Northstar Labs")
+        self.assertEqual(country.url_name, "new-zealand")
+        self.assertEqual(company.country, country)
+        self.assertEqual(company.city, city)
+        self.assertEqual(company.type, client_type)
+        self.assertEqual(company.email, "")
+        self.assertEqual(company.phone, "+64 4 555 0100")
+        self.assertEqual(company.website, "https://northstar.example")
+        self.assertEqual(company.registration_number, "NZ-100")
+        self.assertEqual(company.owner, user)
+        self.assertEqual(company.department_id, department.pk)
+        self.assertEqual(
+            interrupt.call_args.args[0]["data"]["related_records_to_create"],
+            ["country", "city", "type"],
         )
+        self.assertIn("SUCCESS", result)
 
-        project = Project.objects.get(name="New CRM project")
-        self.assertIn(str(project.pk), result)
-        self.assertEqual(list(project.responsible.all()), [self.user])
-        self.assertEqual(list(project.tags.values_list("name", flat=True)), ["launch"])
-        reminder = Reminder.objects.get(object_id=project.pk)
-        self.assertEqual(reminder.reminder_date.date().isoformat(), "2026-12-01")
-        self.assertEqual(interrupt.call_count, 1)
-
-    @patch("ai_assistant.task_tools.interrupt", return_value="approved")
-    def test_prepare_task_and_subtask_enforce_project_hierarchy(self, interrupt):
-        task_result = prepare_task.invoke(
-            {"project_id": self.project.pk, "name": "Plan rollout"},
-            config=self.config,
-        )
-        task = Task.objects.get(name="Plan rollout")
-        self.assertIn(str(task.pk), task_result)
-        self.assertEqual(task.project_id, self.project.pk)
-        self.assertIsNone(task.task_id)
-
-        subtask_result = prepare_subtask.invoke(
-            {"parent_task_id": task.pk, "name": "Review migration"},
-            config=self.config,
-        )
-        subtask = Task.objects.get(name="Review migration")
-        self.assertIn(str(subtask.pk), subtask_result)
-        self.assertEqual(subtask.project_id, self.project.pk)
-        self.assertEqual(subtask.task_id, task.pk)
-        self.assertEqual(interrupt.call_count, 2)
-
-        nested_result = prepare_subtask.invoke(
-            {"parent_task_id": subtask.pk, "name": "Unsupported nested item"},
-            config=self.config,
-        )
-        self.assertIn("cannot have nested subtasks", nested_result)
-        self.assertEqual(interrupt.call_count, 2)
-
-    def test_prepare_task_rejects_unknown_project_and_non_iso_dates(self):
-        unknown_project = prepare_task.invoke(
-            {"project_id": 999999, "name": "Task"},
-            config=self.config,
-        )
-        invalid_date = prepare_project.invoke(
-            {"name": "Invalid date project", "due_date": "next Friday"},
-            config=self.config,
-        )
-
-        self.assertIn("list_projects", unknown_project)
-        self.assertIn("YYYY-MM-DD", invalid_date)
-        self.assertFalse(Project.objects.filter(name="Invalid date project").exists())
-
-    def test_prepare_task_rechecks_project_visibility_after_approval(self):
-        other_user = get_user_model().objects.create_user(
-            username="other-owner",
-        )
-
-        def revoke_project_access(_payload):
-            Project.objects.filter(pk=self.project.pk).update(owner=other_user)
-            return "approved"
-
-        before = Task.objects.count()
-        with patch(
-            "ai_assistant.task_tools.interrupt",
-            side_effect=revoke_project_access,
-        ):
-            with self.assertRaises(PermissionDenied):
-                prepare_task.invoke(
-                    {"project_id": self.project.pk, "name": "No longer accessible"},
-                    config=self.config,
-                )
-
-        self.assertEqual(Task.objects.count(), before)
-
-    def test_prepare_task_rechecks_add_permission_after_approval(self):
-        add_task = Permission.objects.get(
-            content_type__app_label="tasks",
-            codename="add_task",
-        )
-
-        def revoke_add_permission(_payload):
-            self.user.user_permissions.remove(add_task)
-            return "approved"
-
-        before = Task.objects.count()
-        with patch(
-            "ai_assistant.task_tools.interrupt",
-            side_effect=revoke_add_permission,
-        ):
-            with self.assertRaises(PermissionDenied):
-                prepare_task.invoke(
-                    {"project_id": self.project.pk, "name": "No longer permitted"},
-                    config=self.config,
-                )
-
-        self.assertEqual(Task.objects.count(), before)
-
-    def test_write_requires_task_add_permission(self):
+    def test_company_reuses_named_related_records_case_insensitively(self):
+        department = Department.objects.create(name="Existing company department")
         user = get_user_model().objects.create_user(
-            username="read-only",
+            username="existing-company-user",
+            password="test-password",
+        )
+        user.groups.add(department)
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="crm",
+                codename__in=("add_company",),
+            )
+        )
+        country = Country.objects.create(
+            name="Iceland",
+            url_name="iceland",
+        )
+        city = City.objects.create(name="Reykjavik", country=country)
+        client_type = ClientType.objects.create(
+            name="Reseller",
+            department=department,
+        )
+
+        with patch(
+            "ai_assistant.tools.interrupt",
+            return_value="approved",
+        ) as interrupt:
+            prepare_company.invoke(
+                {
+                    "full_name": "Aurora Traders",
+                    "country_name": "iceland",
+                    "city_name": "reykjavik",
+                    "type_name": "reseller",
+                },
+                config={"configurable": {"user_id": user.pk}},
+            )
+
+        company = Company.objects.get(full_name="Aurora Traders")
+        self.assertEqual(company.country, country)
+        self.assertEqual(company.city, city)
+        self.assertEqual(company.type, client_type)
+        self.assertEqual(
+            interrupt.call_args.args[0]["data"]["related_records_to_create"],
+            [],
+        )
+
+    def test_company_rejection_does_not_create_company_or_related_records(self):
+        user = get_user_model().objects.create_user(
+            username="rejected-company-user",
             password="test-password",
         )
         user.user_permissions.add(
             *Permission.objects.filter(
-                content_type__app_label="tasks",
-                codename="view_project",
+                content_type__app_label="crm",
+                codename__in=(
+                    "add_company",
+                    "add_country",
+                    "add_city",
+                ),
             )
         )
 
-        with patch("ai_assistant.task_tools.interrupt") as interrupt:
-            with self.assertRaises(PermissionDenied):
-                prepare_task.invoke(
-                    {"project_id": self.project.pk, "name": "Unauthorized"},
-                    config={"configurable": {"user_id": user.pk}},
-                )
+        with patch("ai_assistant.tools.interrupt", return_value="rejected"):
+            result = prepare_company.invoke(
+                {
+                    "full_name": "Rejected Company",
+                    "country_name": "Lumeria",
+                    "city_name": "Aster",
+                },
+                config={"configurable": {"user_id": user.pk}},
+            )
 
+        self.assertIn("CANCELLED", result)
+        self.assertFalse(Company.objects.filter(full_name="Rejected Company").exists())
+        self.assertFalse(Country.objects.filter(name="Lumeria").exists())
+        self.assertFalse(City.objects.filter(name="Aster").exists())
+
+    def test_company_creation_does_not_require_or_store_email(self):
+        user = get_user_model().objects.create_user(
+            username="email-free-company-user",
+            password="test-password",
+        )
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="crm",
+                codename__in=("add_company",),
+            )
+        )
+
+        with patch("ai_assistant.tools.interrupt", return_value="approved"):
+            result = prepare_company.invoke(
+                {"full_name": "Email-Free Company"},
+                config={"configurable": {"user_id": user.pk}},
+            )
+        city_without_country = prepare_company.invoke(
+            {
+                "full_name": "Email-Free Company",
+                "city_name": "San Francisco",
+            },
+            config={"configurable": {"user_id": user.pk}},
+        )
+
+        company = Company.objects.get(full_name="Email-Free Company")
+        self.assertEqual(company.email, "")
+        self.assertIn("SUCCESS", result)
+        self.assertIn("NEEDS_DETAILS", city_without_country)
+        self.assertIn("country is required", city_without_country)
+
+    def test_company_tool_schema_does_not_include_email(self):
+        self.assertNotIn("email", prepare_company.args_schema.model_fields)
+
+    def test_new_company_type_requires_one_user_department(self):
+        user = get_user_model().objects.create_user(
+            username="departmentless-company-user",
+            password="test-password",
+        )
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="crm",
+                codename__in=("add_company", "add_clienttype"),
+            )
+        )
+
+        with patch("ai_assistant.tools.interrupt") as interrupt:
+            result = prepare_company.invoke(
+                {
+                    "full_name": "No Department Company",
+                    "type_name": "Unassigned Type",
+                },
+                config={"configurable": {"user_id": user.pk}},
+            )
+
+        self.assertIn("ERROR:", result)
+        self.assertIn("0 departments; exactly one is required", result)
+        interrupt.assert_not_called()
+        self.assertFalse(
+            ClientType.objects.filter(name="Unassigned Type").exists()
+        )
+
+    def test_company_type_with_multiple_user_departments_returns_clean_error(self):
+        first = Department.objects.create(name="First company department")
+        second = Department.objects.create(name="Second company department")
+        user = get_user_model().objects.create_user(
+            username="multi-department-company-user",
+            password="test-password",
+        )
+        user.groups.add(first, second)
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="crm",
+                codename__in=("add_company", "add_clienttype"),
+            )
+        )
+
+        with patch("ai_assistant.tools.interrupt") as interrupt:
+            result = prepare_company.invoke(
+                {
+                    "full_name": "Multiple Department Company",
+                    "type_name": "New Company Type",
+                },
+                config={"configurable": {"user_id": user.pk}},
+            )
+
+        self.assertIn("ERROR:", result)
+        self.assertIn("2 departments; exactly one is required", result)
+        self.assertFalse(
+            Company.objects.filter(
+                full_name="Multiple Department Company"
+            ).exists()
+        )
+        self.assertFalse(ClientType.objects.filter(name="New Company Type").exists())
         interrupt.assert_not_called()
 
+    def test_list_departments_shows_only_authenticated_users_departments(self):
+        department = Department.objects.create(name="Visible department")
+        Department.objects.create(name="Other department")
+        user = get_user_model().objects.create_user(
+            username="department-list-user",
+            password="test-password",
+        )
+        user.groups.add(department)
+
+        result = list_departments.invoke(
+            {},
+            config={"configurable": {"user_id": user.pk}},
+        )
+
+        self.assertEqual(
+            json.loads(result),
+            [{"id": department.pk, "name": "Visible department"}],
+        )
+
+
+class TestAssistantApi(TestCase):
     @patch(
         "ai_assistant.api_views.app.get_state",
         return_value=SimpleNamespace(values={"messages": ["started"]}),
@@ -315,16 +435,21 @@ class TestTaskManagementTools(TestCase):
         "ai_assistant.api_views.app.invoke",
         return_value={
             "__interrupt__": [
-                SimpleNamespace(value={"action": "CREATE_TASK", "data": {"name": "Task"}})
+                SimpleNamespace(
+                    value={
+                        "action": "CREATE_LEAD",
+                        "data": {"first_name": "Ada", "email": "ada@example.com"},
+                    }
+                )
             ]
         },
     )
-    def test_approval_endpoint_returns_next_pending_write(
+    def test_approval_endpoint_returns_pending_lead_approval(
         self, invoke, get_state
     ):
         request = APIRequestFactory().post(
             "/api/ai/approve/",
-            {"thread_id": "project-workflow", "decision": "approved"},
+            {"thread_id": "lead-workflow", "decision": "approved"},
             format="json",
         )
         force_authenticate(
@@ -336,12 +461,12 @@ class TestTaskManagementTools(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["status"], "pending_approval")
-        self.assertEqual(response.data["thread_id"], "project-workflow")
-        self.assertEqual(response.data["payload"]["action"], "CREATE_TASK")
+        self.assertEqual(response.data["thread_id"], "lead-workflow")
+        self.assertEqual(response.data["payload"]["action"], "CREATE_LEAD")
         invoke.assert_called_once()
         self.assertEqual(
             invoke.call_args.kwargs["config"]["configurable"],
-            {"thread_id": "user-73:project-workflow", "user_id": 73},
+            {"thread_id": "user-73:lead-workflow", "user_id": 73},
         )
         get_state.assert_called_once()
 
@@ -412,17 +537,14 @@ class TestTaskManagementTools(TestCase):
         self.assertIn("invalid or unavailable", response.data["message"])
 
     def test_agent_tool_registry_includes_gemini_and_groq_callables(self):
-        names = {tool.name for tool in tools}
-        self.assertTrue(
+        self.assertEqual(
+            {tool.name for tool in tools},
             {
+                "search_database_schema",
                 "prepare_lead",
-                "list_projects",
-                "list_team_members",
-                "list_tasks",
-                "prepare_project",
-                "prepare_task",
-                "prepare_subtask",
-            }.issubset(names)
+                "prepare_company",
+                "list_departments",
+            },
         )
 
 
@@ -446,7 +568,7 @@ class TestLlmFallback(TestCase):
             )
         )
 
-        response = build_fallback_llm(primary, fallback).invoke(
+        response = build_fallback_llm(primary, [fallback]).invoke(
             "Create a lead for Ada."
         )
 
