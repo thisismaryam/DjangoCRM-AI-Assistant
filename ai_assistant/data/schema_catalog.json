@@ -4009,7 +4009,7 @@
         "fields": [],
         "relationships": [],
         "reverse_relationships": [],
-        "description": "Shipment is a CRM model. Fields: . Relationships: . Related models: ."
+        "description": "Shipment is a proxy model for Output. It uses the same database table and fields as Output. When users ask about Shipment, retrieve the Output model schema."
     },
     "CategoryPriceRule": {
         "model": "CategoryPriceRule",
