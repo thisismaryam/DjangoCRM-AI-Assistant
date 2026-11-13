@@ -58,7 +58,6 @@ def extract_models():
 
         # Only forward fields: exclude auto-created reverse relations
         for field in meta.get_fields():
-            # Do not duplicate their reverse relationships.
             if meta.proxy:
                 continue
 
@@ -195,6 +194,18 @@ def extract_models():
     # --------------------------------------------------
 
     for model_name, data in schema_catalog.items():
+
+        # Proxy models share the concrete model's database table.
+        # Describe the proxy as an alternative name, not a separate schema.
+        if data["proxy"]:
+            concrete_name = data["concrete_model"]
+            data["description"] = (
+                f"{model_name} is a proxy model for {concrete_name}. "
+                f"It uses the same database table and fields as {concrete_name}. "
+                f"When users ask about {model_name}, retrieve the "
+                f"{concrete_name} model schema."
+            )
+            continue
 
         field_text = ", ".join(
             f"{field['name']} ({field['type']})"

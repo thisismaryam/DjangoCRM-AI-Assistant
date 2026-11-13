@@ -130,3 +130,9 @@ dmypy.json
 .vscode/
 pytest.ini
 .push.settings.jsonc
+
+
+# AI Assistant local state
+checkpoints.sqlite
+checkpoints.sqlite-shm
+checkpoints.sqlite-wal

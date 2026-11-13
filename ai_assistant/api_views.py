@@ -7,7 +7,7 @@ from django.core.exceptions import (
 )
 from django.db import DatabaseError, IntegrityError
 from django.db.utils import DataError
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.types import Command
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import (
@@ -39,27 +39,60 @@ def _get_public_thread_id(data: dict) -> str | None:
     return thread_id
 
 
-def _approval_response(result: dict, thread_id: str, decision: str | None = None):
-    if "__interrupt__" in result:
+def _snapshot_interrupt(snapshot) -> dict | None:
+    """Return the pending interrupt payload from the persisted graph state."""
+    if not snapshot:
+        return None
+    for task in snapshot.tasks or ():
+        for pending in getattr(task, "interrupts", ()) or ():
+            value = getattr(pending, "value", None)
+            if value is not None:
+                return value
+    return None
+
+
+def _last_ai_text(result: dict) -> str:
+    """Return the last AI message text, ignoring tool-call-only messages."""
+    messages = result.get("messages") or []
+    for msg in reversed(messages):
+        if isinstance(msg, ToolMessage):
+            # Tool result — keep going up the stack to find the AI response after it
+            continue
+        if isinstance(msg, AIMessage):
+            if getattr(msg, "tool_calls", None):
+                # This AI message only requested a tool; skip it
+                continue
+            content = getattr(msg, "content", "")
+            if isinstance(content, list):
+                content = "".join(
+                    part.get("text", "") if isinstance(
+                        part, dict) else str(part)
+                    for part in content
+                )
+            if content and content.strip():
+                return content
+    return ""
+
+
+def _build_response(config: dict, thread_id: str, result: dict, decision: str | None = None):
+    # The invoke return value can be incomplete when a node pauses. The state
+    # snapshot is authoritative for both pending approvals and completed turns.
+    snapshot = app.get_state(config)
+    payload = _snapshot_interrupt(snapshot)
+    if payload is not None:
         return Response({
             "status": "pending_approval",
             "thread_id": thread_id,
-            "payload": result["__interrupt__"][0].value,
+            "payload": payload,
         })
-
-    last_message = result["messages"][-1]
-    message = getattr(last_message, "content", "")
-    if isinstance(message, list):
-        message = "".join(
-            part.get("text", "") if isinstance(part, dict) else str(part)
-            for part in message
-        )
-    if not message:
-        message = "Decision processed." if decision else "I have processed your request."
+    state = getattr(snapshot, "values", None) or result or {}
+    text = _last_ai_text(state)
+    if not text:
+        text = "Decision processed." if decision else "I have processed your request."
     return Response({
         "status": "success",
         "thread_id": thread_id,
-        "message": message,
+        "message": text,
     })
 
 
@@ -87,7 +120,7 @@ def chat_view(request):
             {"messages": [HumanMessage(content=message)]},
             config=config,
         )
-        return _approval_response(result, thread_id)
+        return _build_response(config, thread_id, result)
     except PermissionDenied:
         return Response(
             {"status": "error", "message": "You are not permitted to perform this action."},
@@ -134,7 +167,7 @@ def approve_view(request):
                 status=404,
             )
         result = app.invoke(Command(resume=decision), config=config)
-        return _approval_response(result, thread_id, decision)
+        return _build_response(config, thread_id, result, decision)
     except PermissionDenied:
         return Response(
             {"status": "error", "message": "You are not permitted to perform this action."},
