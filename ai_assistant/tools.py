@@ -21,8 +21,8 @@ from crm.models import City, ClientType, Company, Country, Lead
 from crm.models import (
     City, ClientType, Company, Country, Lead,
     Currency, Deal, Payment, Rate,
+    Contact,   # NEW: needed by prepare_deal / search_deals
 )
-
 SCHEMA_CATALOG_PATH = Path(__file__).resolve().parent / \
     "data" / "schema_catalog.json"
 MAX_SCHEMA_FIELDS = 10
@@ -1064,6 +1064,436 @@ def prepare_payment(
         f"(status: {payment.get_status_display()}) for deal #{deal.pk}."
     )
 
+# ------------------------------------------------------------------
+# Phase 5.1 — Deal helpers
+# ------------------------------------------------------------------
+
+
+MAX_DEAL_RESULTS = 25
+
+
+def _deal_to_dict(deal: Deal, *, include_related: bool = False) -> dict:
+    """Serialise a Deal without leaking Decimals or model objects."""
+    payload = {
+        "id": deal.pk,
+        "name": deal.name,
+        "ticket": deal.ticket or None,
+        "amount": str(deal.amount) if deal.amount is not None else None,
+        "currency": deal.currency.name if deal.currency_id else None,
+        "next_step": deal.next_step,
+        "next_step_date": (
+            deal.next_step_date.isoformat() if deal.next_step_date else None
+        ),
+        "stage": deal.stage.name if deal.stage_id else None,
+        "active": deal.active,
+        "relevant": deal.relevant,
+        "important": deal.important,
+        "company": (
+            {"id": deal.company_id, "name": deal.company.full_name}
+            if deal.company_id else None
+        ),
+        "contact": (
+            {"id": deal.contact_id, "name": deal.contact.full_name}
+            if deal.contact_id else None
+        ),
+        "lead": (
+            {"id": deal.lead_id, "name": deal.lead.full_name}
+            if deal.lead_id else None
+        ),
+    }
+    if include_related:
+        payload["description"] = deal.description or None
+        payload["closing_date"] = (
+            deal.closing_date.isoformat() if deal.closing_date else None
+        )
+        payload["probability"] = deal.probability
+        payload["request"] = (
+            {"id": deal.request_id, "name": str(deal.request)}
+            if deal.request_id else None
+        )
+    return payload
+
+
+def _generate_deal_ticket() -> str:
+    """Generate a unique 16-char ticket (Deal.ticket is unique, max_length=16)."""
+    import uuid
+    while True:
+        ticket = uuid.uuid4().hex[:16]
+        if not Deal.objects.filter(ticket=ticket).exists():
+            return ticket
+
+
+@tool
+def search_deals(
+    company_name: str = "",
+    contact_id: int | None = None,
+    lead_id: int | None = None,
+    active_only: bool = False,
+    *,
+    config: RunnableConfig,
+) -> str:
+    """Search CRM deals. All filters are optional.
+
+    company_name: exact full_name of the Company (case-insensitive).
+    contact_id / lead_id: numeric IDs of the linked Contact / Lead.
+    active_only: if True, only return deals with active=True.
+
+    Returns up to 25 deals with key fields. Use get_deal_details for the full
+    record plus its related records.
+    """
+    _current_user(config)
+
+    qs = Deal.objects.select_related(
+        "company", "contact", "lead", "currency", "stage"
+    ).order_by("-id")
+
+    if company_name:
+        company = Company.objects.filter(
+            full_name__iexact=company_name.strip()
+        ).first()
+        if company is None:
+            return _needs_details(
+                f'No company found with name "{company_name}". '
+                f"Ask the user for a valid company or search companies first."
+            )
+        qs = qs.filter(company=company)
+
+    if contact_id is not None:
+        if not Contact.objects.filter(pk=contact_id).exists():
+            return _needs_details(f"No contact found with ID {contact_id}.")
+        qs = qs.filter(contact_id=contact_id)
+
+    if lead_id is not None:
+        if not Lead.objects.filter(pk=lead_id).exists():
+            return _needs_details(f"No lead found with ID {lead_id}.")
+        qs = qs.filter(lead_id=lead_id)
+
+    if active_only:
+        qs = qs.filter(active=True)
+
+    results = list(qs[:MAX_DEAL_RESULTS])
+    if not results:
+        return "No deals match the given criteria."
+
+    payload = [_deal_to_dict(d) for d in results]
+    return json.dumps(
+        {"count": len(payload), "deals": payload},
+        ensure_ascii=False,
+    )
+
+
+@tool
+def get_deal_details(deal_id: int, *, config: RunnableConfig) -> str:
+    """Return full details of one Deal by its numeric ID, including related
+    Company, Contact, Lead, and Request fields."""
+    _current_user(config)
+
+    deal = (
+        Deal.objects.select_related(
+            "company", "contact", "lead", "request",
+            "currency", "stage", "closing_reason",
+        )
+        .filter(pk=deal_id)
+        .first()
+    )
+    if deal is None:
+        return _needs_details(f"No deal found with ID {deal_id}.")
+
+    return json.dumps(
+        _deal_to_dict(deal, include_related=True),
+        ensure_ascii=False,
+    )
+
+
+@tool
+def search_companies(name: str = "", *, config: RunnableConfig) -> str:
+    """Search CRM companies by partial name (case-insensitive).
+
+    Returns up to 20 companies with id, full_name, country, city, and
+    phone. Use this before any operation that requires a company ID.
+    """
+    _current_user(config)
+
+    qs = Company.objects.select_related(
+        "country", "city").order_by("full_name")
+    if name.strip():
+        qs = qs.filter(full_name__icontains=name.strip())
+
+    rows = list(qs[:20])
+    if not rows:
+        return f'No companies found matching "{name}".' if name else \
+            "No companies in the database."
+
+    payload = [
+        {
+            "id": c.pk,
+            "name": c.full_name,
+            "country": c.country.name if c.country_id else None,
+            "city": c.city_name or (c.city.name if c.city_id else None),
+            "phone": c.phone or None,
+        }
+        for c in rows
+    ]
+    return json.dumps({"count": len(payload), "companies": payload},
+                      ensure_ascii=False)
+
+
+@tool
+def prepare_deal(
+    name: str,
+    next_step: str,
+    next_step_date: str,
+    amount: str = "",
+    currency_name: str = "",
+    company_name: str = "",
+    contact_id: int | None = None,
+    lead_id: int | None = None,
+    request_id: int | None = None,
+    description: str = "",
+    closing_date: str = "",
+    *,
+    config: RunnableConfig,
+) -> str:
+    """Prepare a Deal for creation, then request approval.
+
+    Required: name, next_step, next_step_date (YYYY-MM-DD).
+
+    Optional: amount, currency_name, company_name, contact_id, lead_id,
+    request_id, description, closing_date.
+
+    Relationship rules:
+      - If both company_name and contact_id are given, the Contact MUST belong
+        to that Company. Otherwise the tool refuses.
+      - If contact_id is given without company_name, company is inferred from
+        the contact's company (Contact.company is required).
+      - Same inference for lead_id -> lead.company (if any).
+
+    Use this ONLY when the user explicitly wants to create a Deal. Never invent
+    IDs — resolve names to IDs via read tools first.
+    """
+    user = _current_user(config)
+    _require_permission(user, "crm.add_deal")
+
+    # ---- 1. Validate required strings ----
+    name = (name or "").strip()
+    next_step = (next_step or "").strip()
+    if not name:
+        return _needs_details("Deal name is required. Ask the user.")
+    if not next_step:
+        return _needs_details("Deal next_step is required. Ask the user.")
+
+    next_step_date_obj = _parse_iso_date(next_step_date)
+    if next_step_date_obj is None:
+        return _needs_details(
+            f'next_step_date "{next_step_date}" is not a valid YYYY-MM-DD date.'
+        )
+
+    closing_date_obj = None
+    if closing_date:
+        closing_date_obj = _parse_iso_date(closing_date)
+        if closing_date_obj is None:
+            return _needs_details(
+                f'closing_date "{closing_date}" is not a valid YYYY-MM-DD date.'
+            )
+
+    # ---- 2. Resolve company (by name) ----
+    company = None
+    if company_name.strip():
+        company = Company.objects.filter(
+            full_name__iexact=company_name.strip()
+        ).first()
+        if company is None:
+            return _needs_details(
+                f'No company found with name "{company_name}". '
+                f"Search companies first or provide a valid name."
+            )
+
+    # ---- 3. Resolve contact ----
+    contact = None
+    if contact_id is not None:
+        contact = Contact.objects.select_related("company").filter(
+            pk=contact_id
+        ).first()
+        if contact is None:
+            return _needs_details(f"No contact found with ID {contact_id}.")
+
+    # ---- 4. Resolve lead ----
+    lead = None
+    if lead_id is not None:
+        lead = Lead.objects.select_related("company").filter(
+            pk=lead_id
+        ).first()
+        if lead is None:
+            return _needs_details(f"No lead found with ID {lead_id}.")
+
+    # ---- 5. Resolve request (optional) ----
+    request_obj = None
+    if request_id is not None:
+        from crm.models import Request as RequestModel
+        request_obj = RequestModel.objects.filter(pk=request_id).first()
+        if request_obj is None:
+            return _needs_details(f"No request found with ID {request_id}.")
+
+    # ---- 6. Cross-validate Company <-> Contact ----
+    # STRICT: if both given, contact.company must equal company.
+    if contact is not None and company is not None:
+        if contact.company_id != company.pk:
+            return _error(
+                f"Contact #{contact.pk} ({contact.full_name}) belongs to "
+                f"company #{contact.company_id} ({contact.company.full_name}), "
+                f"not to {company.full_name} (#{company.pk}). "
+                f"Deal was not created."
+            )
+
+    # If only contact given -> infer company from contact (it's required on Contact)
+    if contact is not None and company is None:
+        company = contact.company
+
+    # If only lead given and it has a company -> use that (loose match, no error)
+    if lead is not None and company is None and lead.company_id:
+        company = lead.company
+
+    # ---- 7. Resolve currency + amount ----
+    amount_dec = None
+    if amount.strip():
+        amount_dec = _parse_decimal(amount)
+        if amount_dec is None:
+            return _needs_details(
+                f'Amount "{amount}" is not a valid number.'
+            )
+        if amount_dec < Decimal("0"):
+            return _needs_details(
+                "Deal amount cannot be negative. Ask the user to correct it."
+            )
+        if amount_dec.as_tuple().exponent < -2:
+            return _needs_details(
+                "Amount has more than 2 decimal places. Round it and try again."
+            )
+
+    resolved_currency = None
+    if currency_name.strip():
+        resolved_currency = Currency.objects.filter(
+            name__iexact=currency_name.strip()
+        ).first()
+        if resolved_currency is None:
+            available = list(
+                Currency.objects.values_list("name", flat=True)[:20]
+            )
+            return _needs_details(
+                f'Currency "{currency_name}" does not exist. '
+                f"Available: {', '.join(available) or 'none'}."
+            )
+
+    # ---- 8. Build approval payload ----
+    proposed = {
+        "name": name,
+        "next_step": next_step,
+        "next_step_date": next_step_date_obj.isoformat(),
+        "description": description.strip() or None,
+        "amount": str(amount_dec) if amount_dec is not None else "0",
+        "currency": resolved_currency.name if resolved_currency else None,
+        "closing_date": (
+            closing_date_obj.isoformat() if closing_date_obj else None
+        ),
+    }
+
+    related = {}
+    if company:
+        related["company"] = {"id": company.pk, "name": company.full_name}
+    if contact:
+        related["contact"] = {"id": contact.pk, "name": contact.full_name}
+    if lead:
+        related["lead"] = {"id": lead.pk, "name": lead.full_name}
+    if request_obj:
+        related["request"] = {"id": request_obj.pk, "name": str(request_obj)}
+
+    warnings = []
+    if company is None and contact is None and lead is None:
+        warnings.append(
+            "This deal has no company, contact, or lead attached. "
+            "It will be created as an orphan record."
+        )
+
+    # ---- 9. Request approval ----
+    decision = interrupt(
+        _approval_payload(
+            action="CREATE_DEAL",
+            record_type="Deal",
+            data=proposed,
+            related=related,
+            warnings=warnings,
+        )
+    )
+
+    if decision != "approved":
+        return _cancelled("The user rejected the creation of this deal.")
+
+    # ---- 10. Post-approval re-checks ----
+    user = _current_user(config)
+    _require_permission(user, "crm.add_deal")
+
+    # Re-resolve all related records (they may have been deleted)
+    if company:
+        company = Company.objects.filter(pk=company.pk).first()
+        if company is None:
+            return _cancelled(
+                f"Company #{related['company']['id']} no longer exists. "
+                f"Deal was not created."
+            )
+    if contact:
+        contact = Contact.objects.select_related("company").filter(
+            pk=contact.pk
+        ).first()
+        if contact is None:
+            return _cancelled(
+                f"Contact #{related['contact']['id']} no longer exists. "
+                f"Deal was not created."
+            )
+        if company and contact.company_id != company.pk:
+            return _cancelled(
+                "Contact no longer belongs to the selected company. "
+                "Deal was not created."
+            )
+    if lead:
+        lead = Lead.objects.filter(pk=lead.pk).first()
+        if lead is None:
+            return _cancelled(
+                f"Lead #{related['lead']['id']} no longer exists. "
+                f"Deal was not created."
+            )
+
+    # ---- 11. Create inside a transaction ----
+    try:
+        with transaction.atomic():
+            deal = Deal.objects.create(
+                name=name,
+                next_step=next_step,
+                next_step_date=next_step_date_obj,
+                description=description.strip() or "",
+                amount=amount_dec if amount_dec is not None else Decimal("0"),
+                currency=resolved_currency,
+                company=company,
+                contact=contact,
+                lead=lead,
+                request=request_obj,
+                closing_date=closing_date_obj,
+                ticket=_generate_deal_ticket(),
+                owner=user,
+            )
+    except ValidationError as exc:
+        return _cancelled(
+            "Deal failed model validation: "
+            + " ".join(str(m) for m in exc.messages)
+        )
+    except Exception as exc:
+        return _error(f"Could not create deal. Details: {exc}")
+
+    return _ok(
+        f"Deal #{deal.pk} \"{deal.name}\" created "
+        f"(ticket {deal.ticket}, next step: {deal.next_step} "
+        f"on {deal.next_step_date.isoformat()})."
+    )
+
 
 tools = [
     search_database_schema,
@@ -1076,4 +1506,8 @@ tools = [
     get_company_payments,
     get_deal_payments,
     calculate_received_payments,
+    search_deals,
+    get_deal_details,
+    prepare_deal,
+    search_companies,
 ]

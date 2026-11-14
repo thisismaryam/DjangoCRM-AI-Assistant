@@ -16,6 +16,17 @@ from ai_assistant.context import trim_conversation_history
 from ai_assistant.llm import llm
 from ai_assistant.tools import tools
 
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+# Patch to fix the "parallel_tool_calls" Pydantic crash in Gemini
+if hasattr(ChatGoogleGenerativeAI, "bind_tools"):
+    _original_bind_tools = ChatGoogleGenerativeAI.bind_tools
+
+    def _patched_bind_tools(self, tools, **kwargs):
+        # Force remove the invalid parameter that crashes Google's SDK
+        kwargs.pop("parallel_tool_calls", None)
+        return _original_bind_tools(self, tools, **kwargs)
+    ChatGoogleGenerativeAI.bind_tools = _patched_bind_tools
 # Load API key
 load_dotenv()
 
@@ -89,11 +100,13 @@ def agent_node(state: AgentState):
         "TOOL MAP:\n"
         "  Schema:      search_database_schema(query)\n"
         "  Departments: list_departments()\n"
-        "  Reads:       search_payments(status, date_from, date_to, invoice_number, "
-        "contract_number, order_number) — always pass filters, do not list all "
-        "and filter mentally; get_payment_details / get_company_payments / "
-        "get_deal_payments / calculate_received_payments\n"
-        "  Writes:      prepare_lead, prepare_company, prepare_payment\n"
+        "  Payments — Reads: search_payments, get_payment_details, "
+        "get_company_payments, get_deal_payments, calculate_received_payments\n"
+        "  Deals — Reads:    search_deals(company_name, contact_id, lead_id, "
+        "active_only), get_deal_details(deal_id)\n"
+        "  Companies — Reads: search_companies(name)\n"
+        "  Writes:      prepare_lead, prepare_company, prepare_payment, "
+        "prepare_deal\n"
         "\n"
 
         "WRITE FLOW — applies to every prepare_* tool:\n"
@@ -124,6 +137,17 @@ def agent_node(state: AgentState):
         "- When the user references a specific payment by ID or by 'the last/this "
         "payment', use get_payment_details. When they describe criteria (status, "
         "date range, reference number), use search_payments with the right filters.\n"
+        "\n"
+
+        "DEAL NOTES:\n"
+        "- Deal requires name, next_step, next_step_date (YYYY-MM-DD). "
+        "Ticket is generated automatically; never ask the user for it. "
+        "Company, Contact, Lead, Request, Currency are all optional. "
+        "If both company and contact are provided, the contact MUST belong to that "
+        "company — prepare_deal enforces this. "
+        "If only contact is provided, the company is inferred from contact.company. "
+        "To find deals for a company, use search_deals(company_name='...'). "
+        "Never invent a deal_id. Resolve it with search_deals first.\n"
         "\n"
 
         "STYLE AND SAFETY:\n"
