@@ -4,162 +4,218 @@
 {% block title %}AI Assistant | {{ site_title }}{% endblock %}
 
 {% block extrastyle %}
-    {{ block.super }}
-    <style>
-        /* ── Layout ── */
-        #ai-chat-wrapper {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            max-width: 900px;
-        }
+{{ block.super }}
+<style>
+    /* ── Layout ── */
+    #ai-chat-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        max-width: 900px;
+    }
 
-        /* ── Chat history box ── */
-        #chat-box {
-            border: 1px solid var(--border-color, #ccc);
-            border-radius: 4px;
-            padding: 16px;
-            height: 420px;
-            overflow-y: auto;
-            background: var(--darkened-bg, #f8f8f8);
-            font-size: 14px;
-            line-height: 1.6;
-        }
+    /* ── Chat history box ── */
+    #chat-box {
+        border: 1px solid var(--border-color, #ccc);
+        border-radius: 4px;
+        padding: 16px;
+        height: 420px;
+        overflow-y: auto;
+        background: var(--darkened-bg, #f8f8f8);
+        font-size: 14px;
+        line-height: 1.6;
+    }
 
-        /* ── Individual messages ── */
-        .msg {
-            margin-bottom: 12px;
-            padding: 10px 14px;
-            border-radius: 6px;
-            max-width: 85%;
-            word-wrap: break-word;
-        }
-        .msg-user {
-            background: var(--primary, #417690);
-            color: #fff;
-            margin-left: auto;
-            text-align: right;
-        }
-        .msg-ai {
-            background: var(--selected-row, #e8f0d8);
-            color: var(--body-fg, #333);
-            margin-right: auto;
-        }
-        .msg-error {
-            background: #fde8e8;
-            color: #c0392b;
-            border: 1px solid #c0392b;
-            margin-right: auto;
-        }
-        .msg-typing {
-            background: var(--darkened-bg, #eee);
-            color: var(--body-quiet-color, #666);
-            margin-right: auto;
-            font-style: italic;
-        }
-        .msg-ai p { margin: 0 0 8px; }
-        .msg-ai p:last-child { margin-bottom: 0; }
-        .msg-ai ul, .msg-ai ol { padding-left: 24px; }
-        .msg-ai a { color: var(--link-fg, var(--primary, #417690)); }
+    /* ── Individual messages ── */
+    .msg {
+        margin-bottom: 12px;
+        padding: 10px 14px;
+        border-radius: 6px;
+        max-width: 85%;
+        word-wrap: break-word;
+    }
 
-        /* ── Approval card ── */
-        .approval-card {
-            border: 2px solid var(--primary, #417690);
-            padding: 16px;
-            border-radius: 6px;
-            background: var(--darkened-bg, #f8f8f8);
-            margin-bottom: 12px;
-        }
-        .approval-card h3 {
-            margin: 0 0 10px 0;
-            color: var(--primary, #417690);
-            font-size: 15px;
-        }
-        .approval-card pre {
-            background: var(--body-bg, #fff);
-            border: 1px solid var(--border-color, #ccc);
-            padding: 10px;
-            border-radius: 4px;
-            font-size: 13px;
-            overflow-x: auto;
-            white-space: pre-wrap;
-            color: var(--body-fg, #333);
-        }
-        .approval-actions {
-            display: flex;
-            gap: 10px;
-            margin-top: 12px;
-        }
+    .msg-user {
+        background: var(--primary, #417690);
+        color: #fff;
+        margin-left: auto;
+        text-align: right;
+    }
 
-        /* ── Input area ── */
-        #chat-input-row {
-            display: flex;
-            gap: 10px;
-            margin-top: 12px;
-        }
-        #chat-input {
-            flex: 1;
-            padding: 10px 14px;
-            border: 1px solid var(--border-color, #ccc);
-            border-radius: 4px;
-            font-size: 14px;
-            background: var(--body-bg, #fff);
-            color: var(--body-fg, #333);
-        }
-        #chat-input:focus {
-            outline: none;
-            border-color: var(--primary, #417690);
-            box-shadow: 0 0 0 2px rgba(65,118,144,0.2);
-        }
+    .msg-ai {
+        background: var(--selected-row, #e8f0d8);
+        color: var(--body-fg, #333);
+        margin-right: auto;
+    }
 
-        /* ── Buttons ── */
-        .btn-send {
-            padding: 10px 20px;
-            background: var(--primary, #417690);
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-            white-space: nowrap;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .btn-send:hover { background: var(--primary-fg, #205067); }
-        .btn-send:disabled { opacity: 0.6; cursor: not-allowed; }
+    .msg-error {
+        background: #fde8e8;
+        color: #c0392b;
+        border: 1px solid #c0392b;
+        margin-right: auto;
+    }
 
-        .btn-approve {
-            padding: 8px 18px;
-            background: #28a745;
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .btn-approve:hover { background: #218838; }
-        .btn-approve:disabled { opacity: 0.6; cursor: not-allowed; }
+    .msg-typing {
+        background: var(--darkened-bg, #eee);
+        color: var(--body-quiet-color, #666);
+        margin-right: auto;
+        font-style: italic;
+    }
 
-        .btn-reject {
-            padding: 8px 18px;
-            background: #dc3545;
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .btn-reject:hover { background: #c82333; }
-        .btn-reject:disabled { opacity: 0.6; cursor: not-allowed; }
-    </style>
+    .msg-ai p {
+        margin: 0 0 8px;
+    }
+
+    .msg-ai p:last-child {
+        margin-bottom: 0;
+    }
+
+    .msg-ai ul,
+    .msg-ai ol {
+        padding-left: 24px;
+    }
+
+    .msg-ai a {
+        color: var(--link-fg, var(--primary, #417690));
+    }
+
+    /* ── Approval card ── */
+    .approval-card {
+        border: 2px solid var(--primary, #417690);
+        padding: 16px;
+        border-radius: 6px;
+        background: var(--darkened-bg, #f8f8f8);
+        margin-bottom: 12px;
+    }
+
+    .approval-card h3 {
+        margin: 0 0 10px 0;
+        color: var(--primary, #417690);
+        font-size: 15px;
+    }
+
+    .approval-card pre {
+        background: var(--body-bg, #fff);
+        border: 1px solid var(--border-color, #ccc);
+        padding: 10px;
+        border-radius: 4px;
+        font-size: 13px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        color: var(--body-fg, #333);
+    }
+
+    .approval-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 12px;
+    }
+
+    /* ── Input area ── */
+    #chat-input-row {
+        display: flex;
+        gap: 10px;
+        margin-top: 12px;
+    }
+
+    #chat-input {
+        flex: 1;
+        padding: 10px 14px;
+        border: 1px solid var(--border-color, #ccc);
+        border-radius: 4px;
+        font-size: 14px;
+        background: var(--body-bg, #fff);
+        color: var(--body-fg, #333);
+    }
+
+    #chat-input:focus {
+        outline: none;
+        border-color: var(--primary, #417690);
+        box-shadow: 0 0 0 2px rgba(65, 118, 144, 0.2);
+    }
+
+    /* ── Buttons ── */
+    .btn-send {
+        padding: 10px 20px;
+        background: var(--primary, #417690);
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: bold;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .btn-send:hover {
+        background: var(--primary-fg, #205067);
+    }
+
+    .btn-send:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .btn-approve {
+        padding: 8px 18px;
+        background: #28a745;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .btn-approve:hover {
+        background: #218838;
+    }
+
+    .btn-approve:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .btn-reject {
+        padding: 8px 18px;
+        background: #dc3545;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .btn-reject:hover {
+        background: #c82333;
+    }
+
+    .btn-reject:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    /* ── File Attachment Status ── */
+    #file-attachment-status {
+        display: none;
+        padding: 10px;
+        background: #e8f0d8;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        margin-bottom: 8px;
+        font-size: 13px;
+        justify-content: space-between;
+        align-items: center;
+    }
+</style>
 {% endblock %}
 
 {% block breadcrumbs %}
@@ -174,14 +230,28 @@
     <div id="content-main">
         <div id="chat-box" aria-live="polite" aria-label="Chat history"></div>
 
+        <!-- File Attachment Status Bar -->
+        <div id="file-attachment-status">
+            <span>📎 <strong id="file-name-text"></strong></span>
+            <button type="button" onclick="clearFile()"
+                style="background: none; border: none; color: red; cursor: pointer; font-weight: bold; font-size: 16px;">✖</button>
+        </div>
+
         <div id="chat-input-row">
-            <input
-                type="text"
-                id="chat-input"
+            <!-- File Upload Button -->
+            <label for="file-upload"
+                style="cursor: pointer; padding: 10px; font-size: 20px; display: flex; align-items: center;"
+                title="Attach a document">
+                📎
+            </label>
+            <input id="file-upload" type="file" accept=".pdf,.docx,.txt" style="display: none;"
+                onchange="updateFileName()" />
+
+            <input type="text" id="chat-input"
                 placeholder="{% trans 'Ask a question or say: create a lead for John, email john@example.com' %}"
                 autocomplete="off"
-                onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); sendMessage(); }"
-            >
+                onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); sendMessage(); }">
+
             <button id="send-btn" class="btn-send" onclick="sendMessage()">
                 <i class="material-icons" style="font-size:18px;">send</i>
                 {% trans 'Send' %}
@@ -192,6 +262,26 @@
 
 <script>
     let currentThreadId = null;
+
+    function updateFileName() {
+        const fileInput = document.getElementById('file-upload');
+        const statusDiv = document.getElementById('file-attachment-status');
+        const nameText = document.getElementById('file-name-text');
+
+        if (fileInput.files.length > 0) {
+            nameText.textContent = fileInput.files[0].name;
+            statusDiv.style.display = 'flex';
+        } else {
+            statusDiv.style.display = 'none';
+            nameText.textContent = '';
+        }
+    }
+
+    function clearFile() {
+        const fileInput = document.getElementById('file-upload');
+        fileInput.value = '';
+        updateFileName();
+    }
 
     function escapeHtml(text) {
         const d = document.createElement('div');
@@ -353,23 +443,45 @@
     async function sendMessage() {
         const input = document.getElementById('chat-input');
         const sendBtn = document.getElementById('send-btn');
-        const message = input.value.trim();
-        if (!message) return;
+        const fileInput = document.getElementById('file-upload');
 
-        appendMessage('user', message);
+        const message = input.value.trim();
+        const file = fileInput.files[0];
+
+        if (!message && !file) return;
+
+        // Display user message
+        if (file) {
+            appendMessage('user', (message || '') + `\n[Attached File: ${file.name}]`);
+        } else {
+            appendMessage('user', message);
+        }
+
+        // Clear UI
         input.value = '';
+        clearFile();
+
         sendBtn.disabled = true;
         showTyping();
 
         try {
+            const formData = new FormData();
+            formData.append("message", message);
+            if (file) {
+                formData.append("file", file);
+            }
+            if (currentThreadId) {
+                formData.append("thread_id", currentThreadId);
+            }
+
             const response = await fetch('/api/ai/chat/', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
                     'X-CSRFToken': getCookie('csrftoken')
                 },
-                body: JSON.stringify({message: message, thread_id: currentThreadId})
+                body: formData
             });
+
             removeTyping();
             const data = await response.json();
 
@@ -406,7 +518,7 @@
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCookie('csrftoken')
                 },
-                body: JSON.stringify({thread_id: currentThreadId, decision: decision})
+                body: JSON.stringify({ thread_id: currentThreadId, decision: decision })
             });
             const data = await response.json();
             if (data.thread_id) currentThreadId = data.thread_id;

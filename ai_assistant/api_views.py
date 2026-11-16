@@ -18,6 +18,7 @@ from rest_framework.decorators import (
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from ai_assistant.documents.extract import extract_text_from_file
 from ai_assistant.agent import app
 
 
@@ -56,11 +57,9 @@ def _last_ai_text(result: dict) -> str:
     messages = result.get("messages") or []
     for msg in reversed(messages):
         if isinstance(msg, ToolMessage):
-            # Tool result — keep going up the stack to find the AI response after it
             continue
         if isinstance(msg, AIMessage):
             if getattr(msg, "tool_calls", None):
-                # This AI message only requested a tool; skip it
                 continue
             content = getattr(msg, "content", "")
             if isinstance(content, list):
@@ -75,8 +74,6 @@ def _last_ai_text(result: dict) -> str:
 
 
 def _build_response(config: dict, thread_id: str, result: dict, decision: str | None = None):
-    # The invoke return value can be incomplete when a node pauses. The state
-    # snapshot is authoritative for both pending approvals and completed turns.
     snapshot = app.get_state(config)
     payload = _snapshot_interrupt(snapshot)
     if payload is not None:
@@ -101,12 +98,34 @@ def _build_response(config: dict, thread_id: str, result: dict, decision: str | 
 @permission_classes([IsAuthenticated])
 def chat_view(request):
     data = request.data
-    message = data.get("message")
-    if not isinstance(message, str) or not message.strip():
+    message = data.get("message", "")
+    uploaded_file = request.FILES.get("file")
+
+    # Allow sending just a file, just a message, or both
+    if not message.strip() and not uploaded_file:
         return Response(
-            {"status": "error", "message": "A non-empty message is required."},
+            {"status": "error", "message": "A message or a file is required."},
             status=400,
         )
+
+    # Extract text if a file is uploaded
+    if uploaded_file:
+        if uploaded_file.size > 10 * 1024 * 1024:  # 10MB limit
+            return Response(
+                {"status": "error", "message": "File size exceeds 10MB limit."},
+                status=400,
+            )
+
+        try:
+            extracted_text = extract_text_from_file(
+                uploaded_file, uploaded_file.name)
+            message = f"{message}\n\n--- UPLOADED DOCUMENT CONTENT ---\n{extracted_text}"
+        except ValueError as e:
+            return Response(
+                {"status": "error", "message": str(e)},
+                status=400,
+            )
+
     thread_id = _get_public_thread_id(data)
     if thread_id is None:
         return Response(
