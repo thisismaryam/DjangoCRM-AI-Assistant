@@ -176,6 +176,10 @@ class TestAssistantTools(TestCase):
 
         prompt = llm.invoke.call_args.args[0][0].content
         self.assertIn("prepare_crm_bundle", prompt)
+        self.assertIn("deal_workflow", prompt)
+        self.assertIn("deal_description", prompt)
+        self.assertIn("titled 'Workflow', 'Stages'", prompt)
+        self.assertIn("entire text of that section", prompt)
         self.assertIn("DO NOT call the individual prepare_* tools", prompt)
         self.assertIn("ONE unified approval card", prompt)
 

@@ -1705,6 +1705,9 @@ def prepare_crm_bundle(
     deal_next_step_date: str,
     deal_amount: str,
     currency_name: str,
+    deal_workflow: str = "",
+    deal_description: str = "",
+    country_name: str = "",
     *,
     config: RunnableConfig,
 ) -> str:
@@ -1845,10 +1848,15 @@ def prepare_crm_bundle(
         },
         "deal": {
             "name": deal_name,
+            "company": company_name,
+            "contact": f"{contact_first_name} ({contact_email})",
             "next_step": deal_next_step,
             "next_step_date": next_step_date.isoformat(),
             "amount": str(amount),
             "currency": currency.name,
+            "workflow": deal_workflow,
+            "description": deal_description
+
         },
     }
     decision = interrupt(
@@ -1919,6 +1927,8 @@ def prepare_crm_bundle(
                 currency=currency,
                 company=company,
                 contact=contact,
+                workflow=deal_workflow.strip(),       # <--- SAVES TO DB
+                description=deal_description.strip(),
                 ticket=_generate_deal_ticket(),
                 owner=user,
             )
