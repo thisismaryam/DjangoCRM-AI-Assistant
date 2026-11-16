@@ -3,8 +3,8 @@ import json
 from langchain_core.messages import BaseMessage, HumanMessage
 
 
-MAX_HISTORY_TURNS = 2
-MAX_HISTORY_CHARS = 6000
+MAX_HISTORY_TURNS = 3
+MAX_HISTORY_CHARS = 10000
 
 
 def trim_conversation_history(messages: list[BaseMessage]) -> list[BaseMessage]:
