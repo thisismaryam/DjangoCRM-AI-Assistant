@@ -117,7 +117,11 @@ def chat_view(request):
     config = _request_config(request.user, thread_id)
     try:
         result = app.invoke(
-            {"messages": [HumanMessage(content=message)]},
+            {
+                "messages": [HumanMessage(content=message)],
+                "original_request": message,
+                "operation_id": str(uuid.uuid4())
+            },
             config=config,
         )
         return _build_response(config, thread_id, result)

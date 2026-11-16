@@ -16,17 +16,6 @@ from ai_assistant.context import trim_conversation_history
 from ai_assistant.llm import llm
 from ai_assistant.tools import tools
 
-from langchain_google_genai import ChatGoogleGenerativeAI
-
-# Patch to fix the "parallel_tool_calls" Pydantic crash in Gemini
-if hasattr(ChatGoogleGenerativeAI, "bind_tools"):
-    _original_bind_tools = ChatGoogleGenerativeAI.bind_tools
-
-    def _patched_bind_tools(self, tools, **kwargs):
-        # Force remove the invalid parameter that crashes Google's SDK
-        kwargs.pop("parallel_tool_calls", None)
-        return _original_bind_tools(self, tools, **kwargs)
-    ChatGoogleGenerativeAI.bind_tools = _patched_bind_tools
 # Load API key
 load_dotenv()
 
@@ -35,6 +24,8 @@ load_dotenv()
 
 class AgentState(TypedDict):
     messages: Annotated[list, lambda x, y: x + y]
+    original_request: str
+    operation_id: str
 
 
 # Create the Agent Node
@@ -42,10 +33,18 @@ class AgentState(TypedDict):
 
 def agent_node(state: AgentState):
     messages = trim_conversation_history(state["messages"])
+    original_req = state.get("original_request", "")
 
     # Add a system prompt to guide the AI
     system_prompt = SystemMessage(content=(
         f"Today is {timezone.localdate().isoformat()}. "
+        f"==================================================\n"
+        f"CRITICAL CONTEXT — ORIGINAL USER REQUEST:\n"
+        f"'{original_req}'\n"
+        f"==================================================\n\n"
+        f"RULES FOR THIS REQUEST:\n"
+        f"- You MUST remember the details from the original request above. Do not ask the user for information they have already provided in the original request.\n"
+        f"- If the user provides missing details (like a date or currency), and you have enough information to create the record, **IMMEDIATELY call the prepare_* tool**. Do not just reply with text; call the tool.\n\n"
         "You are a CRM assistant with read access to the database schema "
         "and controlled write access to CRM records. You must use the available "
         "database tools for every question that depends on CRM data and every "
@@ -105,11 +104,17 @@ def agent_node(state: AgentState):
         "  Deals — Reads:    search_deals(company_name, contact_id, lead_id, "
         "active_only), get_deal_details(deal_id)\n"
         "  Companies — Reads: search_companies(name)\n"
+        "  Contacts — Reads:  search_contacts(company_name, name), get_contact_details(contact_id)\n"
+        "  Bundles:     prepare_crm_bundle(company_name, contact_first_name, contact_email, deal_name, deal_next_step, deal_next_step_date, deal_amount, currency_name)\n"
         "  Writes:      prepare_lead, prepare_company, prepare_payment, "
-        "prepare_deal\n"
+        "prepare_deal, prepare_contact\n"
         "\n"
 
         "WRITE FLOW — applies to every prepare_* tool:\n"
+        "- If the user asks to create a Company, a Contact, and a Deal in one "
+        "request, DO NOT call the individual prepare_* tools. Instead, gather "
+        "all the required information and call prepare_crm_bundle to show ONE "
+        "unified approval card.\n"
         "1. Gather required inputs. If information is missing or invalid, "
         "ask the user instead of calling the tool prematurely.\n"
         "2. Resolve related records using database read tools.\n"

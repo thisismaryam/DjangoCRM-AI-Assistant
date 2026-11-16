@@ -5,6 +5,7 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.core.exceptions import ValidationError
+from django.core.validators import EmailValidator
 from django.db import transaction
 from django.db.models import Q
 from django.utils.text import slugify
@@ -1389,6 +1390,8 @@ def prepare_deal(
         "name": name,
         "next_step": next_step,
         "next_step_date": next_step_date_obj.isoformat(),
+        "company": company.full_name if company else None,
+        "contact": contact.full_name if contact else None,
         "description": description.strip() or None,
         "amount": str(amount_dec) if amount_dec is not None else "0",
         "currency": resolved_currency.name if resolved_currency else None,
@@ -1494,6 +1497,447 @@ def prepare_deal(
         f"on {deal.next_step_date.isoformat()})."
     )
 
+# ------------------------------------------------------------------
+# Phase 5.2 — Contact helpers & Read tools
+# ------------------------------------------------------------------
+
+
+MAX_CONTACT_RESULTS = 25
+
+
+def _contact_to_dict(contact: Contact, *, include_related: bool = False) -> dict:
+    """Serialise a Contact without leaking model objects."""
+    payload = {
+        "id": contact.pk,
+        "full_name": contact.full_name,
+        "email": contact.email,
+        "phone": contact.phone or None,
+        "title": contact.title or None,
+        "company": (
+            {"id": contact.company_id, "name": contact.company.full_name}
+            if contact.company_id else None
+        ),
+    }
+    if include_related:
+        payload["description"] = contact.description or None
+        payload["address"] = contact.address or None
+        payload["city_name"] = contact.city_name or None
+        payload["disqualified"] = contact.disqualified
+    return payload
+
+
+@tool
+def search_contacts(
+    company_name: str = "",
+    name: str = "",
+    *,
+    config: RunnableConfig,
+) -> str:
+    """Search CRM contacts by company name or contact name.
+
+    All parameters are optional. 
+    Returns up to 25 contacts with id, full_name, email, and company.
+    Use get_contact_details for full info.
+    """
+    _current_user(config)
+
+    qs = Contact.objects.select_related(
+        "company").order_by("first_name", "last_name")
+
+    if company_name.strip():
+        company = Company.objects.filter(
+            full_name__iexact=company_name.strip()
+        ).first()
+        if company is None:
+            return _needs_details(f'No company found with name "{company_name}".')
+        qs = qs.filter(company=company)
+
+    if name.strip():
+        # Search first, middle, or last name
+        qs = qs.filter(
+            Q(first_name__icontains=name.strip()) |
+            Q(last_name__icontains=name.strip())
+        )
+
+    results = list(qs[:MAX_CONTACT_RESULTS])
+    if not results:
+        return "No contacts match the given criteria."
+
+    payload = [_contact_to_dict(c) for c in results]
+    return json.dumps(
+        {"count": len(payload), "contacts": payload},
+        ensure_ascii=False,
+    )
+
+
+@tool
+def get_contact_details(contact_id: int, *, config: RunnableConfig) -> str:
+    """Return full details of a single Contact by its numeric ID."""
+    _current_user(config)
+
+    contact = (
+        Contact.objects.select_related("company", "country", "city")
+        .filter(pk=contact_id)
+        .first()
+    )
+    if contact is None:
+        return _needs_details(f"No contact found with ID {contact_id}.")
+
+    return json.dumps(
+        _contact_to_dict(contact, include_related=True),
+        ensure_ascii=False,
+    )
+
+
+@tool
+def prepare_contact(
+    first_name: str,
+    email: str,
+    company_name: str,
+    last_name: str = "",
+    phone: str = "",
+    title: str = "",
+    *,
+    config: RunnableConfig,
+) -> str:
+    """Prepare a Contact for creation, then request approval.
+
+    Required: first_name, email, company_name.
+    Optional: last_name, phone, title.
+
+    The company must already exist. Use search_companies to find it if needed.
+    """
+    user = _current_user(config)
+    _require_permission(user, "crm.add_contact")
+
+    # ---- 1. Validate required strings ----
+    first_name = (first_name or "").strip()
+    email = (email or "").strip()
+    company_name = (company_name or "").strip()
+
+    if not first_name:
+        return _needs_details("Contact first_name is required.")
+    if not email:
+        return _needs_details("Contact email is required.")
+    if not company_name:
+        return _needs_details("Contact company_name is required.")
+
+    # ---- 2. Resolve company ----
+    company = Company.objects.filter(
+        full_name__iexact=company_name
+    ).first()
+    if company is None:
+        return _needs_details(
+            f'No company found with name "{company_name}". '
+            f"Search companies first or create it."
+        )
+
+    # ---- 3. Build approval payload ----
+    proposed = {
+        "first_name": first_name,
+        "last_name": last_name.strip(),
+        "email": email,
+        "phone": phone.strip() or None,
+        "title": title.strip() or None,
+    }
+
+    related = {
+        "company": {"id": company.pk, "name": company.full_name}
+    }
+
+    # ---- 4. Request approval ----
+    decision = interrupt(
+        _approval_payload(
+            action="CREATE_CONTACT",
+            record_type="Contact",
+            data=proposed,
+            related=related,
+        )
+    )
+
+    if decision != "approved":
+        return _cancelled("The user rejected the creation of this contact.")
+
+    # ---- 5. Post-approval re-checks ----
+    user = _current_user(config)
+    _require_permission(user, "crm.add_contact")
+
+    company = Company.objects.filter(pk=company.pk).first()
+    if company is None:
+        return _cancelled(
+            f"Company #{related['company']['id']} no longer exists. "
+            f"Contact was not created."
+        )
+
+    # ---- 6. Create inside a transaction ----
+    try:
+        with transaction.atomic():
+            contact = Contact.objects.create(
+                first_name=first_name,
+                last_name=last_name.strip(),
+                email=email,
+                phone=phone.strip(),
+                title=title.strip(),
+                company=company,
+                owner=user,
+            )
+    except ValidationError as exc:
+        return _cancelled(
+            "Contact failed model validation: "
+            + " ".join(str(m) for m in exc.messages)
+        )
+    except Exception as exc:
+        return _error(f"Could not create contact. Details: {exc}")
+
+    return _ok(
+        f"Contact #{contact.pk} \"{contact.full_name}\" created "
+        f"for company {company.full_name}."
+    )
+
+
+@tool
+def prepare_crm_bundle(
+    company_name: str,
+    contact_first_name: str,
+    contact_email: str,
+    deal_name: str,
+    deal_next_step: str,
+    deal_next_step_date: str,
+    deal_amount: str,
+    currency_name: str,
+    *,
+    config: RunnableConfig,
+) -> str:
+    """Prepare a Company, Contact, and Deal together for one approval."""
+    company_name = (company_name or "").strip()
+    contact_first_name = (contact_first_name or "").strip()
+    contact_email = (contact_email or "").strip()
+    deal_name = (deal_name or "").strip()
+    deal_next_step = (deal_next_step or "").strip()
+    currency_name = (currency_name or "").strip()
+
+    required = {
+        "company_name": company_name,
+        "contact_first_name": contact_first_name,
+        "contact_email": contact_email,
+        "deal_name": deal_name,
+        "deal_next_step": deal_next_step,
+        "deal_next_step_date": deal_next_step_date,
+        "deal_amount": deal_amount,
+        "currency_name": currency_name,
+    }
+    missing = [name for name, value in required.items() if not value]
+    if missing:
+        return _needs_details(
+            "Required bundle details are missing: "
+            + ", ".join(missing)
+            + "."
+        )
+
+    next_step_date = _parse_iso_date(deal_next_step_date)
+    if next_step_date is None:
+        return _needs_details(
+            f'next_step_date "{deal_next_step_date}" is not a valid YYYY-MM-DD date.'
+        )
+
+    amount = _parse_decimal(deal_amount)
+    if amount is None:
+        return _needs_details(f'Amount "{deal_amount}" is not a valid number.')
+    if amount < Decimal("0"):
+        return _needs_details("Deal amount cannot be negative.")
+    if amount.as_tuple().exponent < -2:
+        return _needs_details(
+            "Amount has more than 2 decimal places. Round it and try again."
+        )
+
+    try:
+        EmailValidator()(contact_email)
+    except ValidationError as exc:
+        return _needs_details(
+            "Contact email is invalid: "
+            + " ".join(str(message) for message in exc.messages)
+        )
+
+    user = _current_user(config)
+    _require_permission(user, "crm.add_company")
+    _require_permission(user, "crm.add_contact")
+    _require_permission(user, "crm.add_deal")
+
+    currency = Currency.objects.filter(name__iexact=currency_name).first()
+    if currency is None:
+        return _needs_details(
+            f'Currency "{currency_name}" does not exist. '
+            "Provide an existing currency code."
+        )
+
+    try:
+        company_matches = list(
+            Company.objects.filter(full_name__iexact=company_name)
+            .order_by("pk")[:2]
+        )
+        if len(company_matches) > 1:
+            return _needs_details(
+                f'More than one company matches "{company_name}". '
+                "Clarify which company to use."
+            )
+        existing_company = company_matches[0] if company_matches else None
+        matching_contacts = list(
+            Contact.objects.filter(email__iexact=contact_email)
+            .select_related("company")
+            .order_by("pk")[:2]
+        )
+        if len(matching_contacts) > 1:
+            return _needs_details(
+                f'More than one contact matches "{contact_email}". '
+                "Clarify which contact to use."
+            )
+        existing_contact = matching_contacts[0] if matching_contacts else None
+        if existing_contact and (
+            existing_company is None
+            or existing_contact.company_id != existing_company.pk
+        ):
+            return _needs_details(
+                f'The contact email "{contact_email}" already belongs to '
+                f"{existing_contact.company.full_name}, not {company_name}. "
+                "Clarify the company or contact email."
+            )
+    except ValidationError as exc:
+        return _needs_details(
+            " ".join(str(message) for message in exc.messages)
+        )
+
+    company_candidate = Company(full_name=company_name)
+    contact_candidate = Contact(
+        first_name=contact_first_name,
+        email=contact_email,
+        company=existing_company,
+    )
+    deal_candidate = Deal(
+        name=deal_name,
+        next_step=deal_next_step,
+        next_step_date=next_step_date,
+        amount=amount,
+        currency=currency,
+    )
+    try:
+        company_candidate.clean_fields(exclude={"email"})
+        contact_candidate.clean_fields(
+            exclude={"company"} if existing_company is None else None
+        )
+        deal_candidate.clean_fields(exclude={"stage", "ticket"})
+    except ValidationError as exc:
+        return _needs_details(
+            " ".join(str(message) for message in exc.messages)
+            + " Correct the bundle details and try again."
+        )
+
+    bundle_data = {
+        "company": {
+            "name": company_name,
+            "status": "reused" if existing_company else "created",
+            "id": existing_company.pk if existing_company else None,
+        },
+        "contact": {
+            "first_name": contact_first_name,
+            "email": contact_email,
+            "status": "reused" if existing_contact else "created",
+            "id": existing_contact.pk if existing_contact else None,
+        },
+        "deal": {
+            "name": deal_name,
+            "next_step": deal_next_step,
+            "next_step_date": next_step_date.isoformat(),
+            "amount": str(amount),
+            "currency": currency.name,
+        },
+    }
+    decision = interrupt(
+        _approval_payload(
+            action="CREATE_CRM_BUNDLE",
+            record_type="Company, Contact, and Deal",
+            data=bundle_data,
+        )
+    )
+    if decision != "approved":
+        return _cancelled("The user rejected the CRM bundle.")
+
+    user = _current_user(config)
+    _require_permission(user, "crm.add_company")
+    _require_permission(user, "crm.add_contact")
+    _require_permission(user, "crm.add_deal")
+
+    try:
+        with transaction.atomic():
+            company_matches = list(
+                Company.objects.select_for_update()
+                .filter(full_name__iexact=company_name)
+                .order_by("pk")[:2]
+            )
+            if len(company_matches) > 1:
+                raise ValidationError(
+                    f'More than one company matches "{company_name}". '
+                    "The CRM bundle was not created."
+                )
+            company = (
+                company_matches[0]
+                if company_matches
+                else Company.objects.create(
+                    full_name=company_name,
+                    owner=user,
+                )
+            )
+            matching_contacts = list(
+                Contact.objects.select_for_update()
+                .filter(email__iexact=contact_email)
+                .select_related("company")
+                .order_by("pk")[:2]
+            )
+            if len(matching_contacts) > 1:
+                raise ValidationError(
+                    f'More than one contact matches "{contact_email}". '
+                    "The CRM bundle was not created."
+                )
+            contact = matching_contacts[0] if matching_contacts else None
+            if contact and contact.company_id != company.pk:
+                raise ValidationError(
+                    f'The contact email "{contact_email}" now belongs to '
+                    f"{contact.company.full_name}, not {company.full_name}. "
+                    "The CRM bundle was not created."
+                )
+            if contact is None:
+                contact = Contact.objects.create(
+                    first_name=contact_first_name,
+                    email=contact_email,
+                    company=company,
+                    owner=user,
+                )
+            deal = Deal.objects.create(
+                name=deal_name,
+                next_step=deal_next_step,
+                next_step_date=next_step_date,
+                amount=amount,
+                currency=currency,
+                company=company,
+                contact=contact,
+                ticket=_generate_deal_ticket(),
+                owner=user,
+            )
+    except ValidationError as exc:
+        return _needs_details(
+            " ".join(str(message) for message in exc.messages)
+            + " No bundle records were created."
+        )
+    except Exception as exc:
+        return _error(
+            "Could not create the CRM bundle; all changes were rolled back. "
+            f"Details: {exc}"
+        )
+
+    return _ok(
+        f"CRM bundle created: Company #{company.pk}, Contact #{contact.pk}, "
+        f"and Deal #{deal.pk} (ticket {deal.ticket})."
+    )
+
 
 tools = [
     search_database_schema,
@@ -1510,4 +1954,8 @@ tools = [
     get_deal_details,
     prepare_deal,
     search_companies,
+    search_contacts,
+    prepare_contact,
+    get_contact_details,
+    prepare_crm_bundle,
 ]

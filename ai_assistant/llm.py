@@ -22,7 +22,7 @@ gemini_primary = ChatGoogleGenerativeAI(
     temperature=0,
     max_tokens=512,
     retries=0,
-).bind_tools(tools, parallel_tool_calls=False)
+).bind_tools(tools)
 
 # 2. Fallback Gemini Model
 gemini_fallback = ChatGoogleGenerativeAI(
@@ -31,7 +31,7 @@ gemini_fallback = ChatGoogleGenerativeAI(
     temperature=0,
     max_tokens=512,
     retries=0,
-).bind_tools(tools, parallel_tool_calls=False)
+).bind_tools(tools)
 
 # 3. Fallback Groq Model
 groq_fallback = ChatGroq(

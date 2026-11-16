@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -18,13 +19,27 @@ from ai_assistant.context import (
     MAX_HISTORY_TURNS,
     trim_conversation_history,
 )
-from ai_assistant.llm import build_fallback_llm
+from ai_assistant.llm import (
+    build_fallback_llm,
+    gemini_fallback,
+    gemini_primary,
+)
 from common.models import Department
-from crm.models import City, ClientType, Company, Country
+from crm.models import (
+    City,
+    ClientType,
+    Company,
+    Contact,
+    Country,
+    Currency,
+    Deal,
+)
 from ai_assistant.tools import (
     MAX_SCHEMA_RESULT_CHARS,
     list_departments,
     prepare_company,
+    prepare_crm_bundle,
+    prepare_deal,
     prepare_lead,
     search_database_schema,
     tools,
@@ -101,10 +116,12 @@ class TestAssistantTools(TestCase):
         self.assertIsInstance(trimmed[1], AIMessage)
         self.assertIsInstance(trimmed[2], ToolMessage)
 
-    def test_context_trimming_retains_latest_two_user_turns_for_follow_up(self):
+    def test_context_trimming_retains_latest_three_user_turns_for_follow_up(self):
         messages = [
             HumanMessage(content="An older unrelated request"),
             AIMessage(content="An older answer"),
+            HumanMessage(content="An older company request"),
+            AIMessage(content="An older company answer"),
             HumanMessage(content="Create Northstar Labs in California."),
             AIMessage(content="I have Northstar Labs in California. Which city?"),
             HumanMessage(content="San Francisco"),
@@ -112,7 +129,7 @@ class TestAssistantTools(TestCase):
 
         trimmed = trim_conversation_history(messages)
 
-        self.assertEqual(MAX_HISTORY_TURNS, 2)
+        self.assertEqual(MAX_HISTORY_TURNS, 3)
         self.assertEqual(trimmed, messages[2:])
 
     def test_agent_prompt_merges_brief_follow_up_with_recent_request(self):
@@ -145,6 +162,22 @@ class TestAssistantTools(TestCase):
             "repeat the tool's error message verbatim",
             prompt[0].content,
         )
+
+    def test_agent_prompt_routes_multi_record_creation_to_bundle(self):
+        original_request = (
+            "Create Northstar Labs, add Ada as a contact, and make a deal."
+        )
+        with patch("ai_assistant.agent.llm", autospec=True) as llm:
+            llm.invoke.return_value = AIMessage(content="I will prepare the bundle.")
+            agent_node({
+                "messages": [HumanMessage(content=original_request)],
+                "original_request": original_request,
+            })
+
+        prompt = llm.invoke.call_args.args[0][0].content
+        self.assertIn("prepare_crm_bundle", prompt)
+        self.assertIn("DO NOT call the individual prepare_* tools", prompt)
+        self.assertIn("ONE unified approval card", prompt)
 
     def test_approved_lead_result_contains_crm_deep_link(self):
         lead = type("LeadResult", (), {"id": 42, "first_name": "Ada"})()
@@ -344,6 +377,221 @@ class TestAssistantTools(TestCase):
     def test_company_tool_schema_does_not_include_email(self):
         self.assertNotIn("email", prepare_company.args_schema.model_fields)
 
+    def _bundle_user(self, username):
+        user = get_user_model().objects.create_user(
+            username=username,
+            password="test-password",
+        )
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="crm",
+                codename__in=("add_company", "add_contact", "add_deal"),
+            )
+        )
+        return user
+
+    def _bundle_arguments(self):
+        return {
+            "company_name": "Northstar Labs",
+            "contact_first_name": "Ada",
+            "contact_email": "ada@northstar.example",
+            "deal_name": "Northstar CRM rollout",
+            "deal_next_step": "Schedule kickoff",
+            "deal_next_step_date": "2026-12-01",
+            "deal_amount": "1250.50",
+            "currency_name": "USD",
+        }
+
+    def test_crm_bundle_creates_all_records_after_one_approval(self):
+        user = self._bundle_user("crm-bundle-user")
+        currency = Currency.objects.create(name="USD")
+
+        with patch(
+            "ai_assistant.tools.interrupt",
+            return_value="approved",
+        ) as interrupt:
+            result = prepare_crm_bundle.invoke(
+                self._bundle_arguments(),
+                config={"configurable": {"user_id": user.pk}},
+            )
+
+        self.assertIn("SUCCESS:", result)
+        interrupt.assert_called_once()
+        payload = interrupt.call_args.args[0]
+        self.assertEqual(payload["action"], "CREATE_CRM_BUNDLE")
+        self.assertEqual(
+            payload["data"]["company"]["status"],
+            "created",
+        )
+        self.assertEqual(
+            payload["data"]["contact"]["status"],
+            "created",
+        )
+        company = Company.objects.get(full_name="Northstar Labs")
+        contact = Contact.objects.get(email="ada@northstar.example")
+        deal = Deal.objects.get(name="Northstar CRM rollout")
+        self.assertEqual(contact.company, company)
+        self.assertEqual(deal.company, company)
+        self.assertEqual(deal.contact, contact)
+        self.assertEqual(deal.currency, currency)
+        self.assertEqual(str(deal.amount), "1250.50")
+
+    def test_crm_bundle_reuses_existing_company_and_contact(self):
+        user = self._bundle_user("crm-bundle-reuse-user")
+        currency = Currency.objects.create(name="EUR")
+        company = Company.objects.create(full_name="Northstar Labs")
+        contact = Contact.objects.create(
+            first_name="Ada",
+            email="ada@northstar.example",
+            company=company,
+        )
+        arguments = self._bundle_arguments()
+        arguments["currency_name"] = "EUR"
+
+        with patch(
+            "ai_assistant.tools.interrupt",
+            return_value="approved",
+        ) as interrupt:
+            result = prepare_crm_bundle.invoke(
+                arguments,
+                config={"configurable": {"user_id": user.pk}},
+            )
+
+        self.assertIn("SUCCESS:", result)
+        interrupt.assert_called_once()
+        data = interrupt.call_args.args[0]["data"]
+        self.assertEqual(data["company"]["status"], "reused")
+        self.assertEqual(data["company"]["id"], company.pk)
+        self.assertEqual(data["contact"]["status"], "reused")
+        self.assertEqual(data["contact"]["id"], contact.pk)
+        self.assertEqual(Company.objects.count(), 1)
+        self.assertEqual(Contact.objects.count(), 1)
+        deal = Deal.objects.get(name="Northstar CRM rollout")
+        self.assertEqual(deal.company, company)
+        self.assertEqual(deal.contact, contact)
+        self.assertEqual(deal.currency, currency)
+
+    def test_crm_bundle_invalid_date_does_not_request_approval(self):
+        user = self._bundle_user("crm-bundle-invalid-user")
+        Currency.objects.create(name="USD")
+        arguments = self._bundle_arguments()
+        arguments["deal_next_step_date"] = "not-a-date"
+
+        with patch("ai_assistant.tools.interrupt") as interrupt:
+            result = prepare_crm_bundle.invoke(
+                arguments,
+                config={"configurable": {"user_id": user.pk}},
+            )
+
+        self.assertIn("NEEDS_DETAILS:", result)
+        interrupt.assert_not_called()
+        self.assertFalse(Company.objects.exists())
+        self.assertFalse(Contact.objects.exists())
+        self.assertFalse(Deal.objects.exists())
+
+    def test_crm_bundle_does_not_duplicate_contact_across_companies(self):
+        user = self._bundle_user("crm-bundle-contact-conflict-user")
+        Currency.objects.create(name="USD")
+        other_company = Company.objects.create(full_name="Other Company")
+        Contact.objects.create(
+            first_name="Ada",
+            email="ada@northstar.example",
+            company=other_company,
+        )
+
+        with patch("ai_assistant.tools.interrupt") as interrupt:
+            result = prepare_crm_bundle.invoke(
+                self._bundle_arguments(),
+                config={"configurable": {"user_id": user.pk}},
+            )
+
+        self.assertIn("NEEDS_DETAILS:", result)
+        interrupt.assert_not_called()
+        self.assertFalse(Company.objects.filter(full_name="Northstar Labs").exists())
+        self.assertEqual(Contact.objects.count(), 1)
+        self.assertFalse(Deal.objects.exists())
+
+    def test_crm_bundle_rolls_back_company_and_contact_if_deal_fails(self):
+        user = self._bundle_user("crm-bundle-rollback-user")
+        Currency.objects.create(name="USD")
+        Deal.objects.create(
+            name="Existing deal",
+            next_step="Review proposal",
+            next_step_date=date(2026, 12, 1),
+            ticket="duplicate-ticket",
+        )
+
+        with (
+            patch(
+                "ai_assistant.tools.interrupt",
+                return_value="approved",
+            ) as interrupt,
+            patch(
+                "ai_assistant.tools._generate_deal_ticket",
+                return_value="duplicate-ticket",
+            ),
+        ):
+            result = prepare_crm_bundle.invoke(
+                self._bundle_arguments(),
+                config={"configurable": {"user_id": user.pk}},
+            )
+
+        self.assertIn("ERROR:", result)
+        self.assertIn("rolled back", result)
+        interrupt.assert_called_once()
+        self.assertFalse(Company.objects.filter(full_name="Northstar Labs").exists())
+        self.assertFalse(Contact.objects.filter(email="ada@northstar.example").exists())
+        self.assertEqual(Deal.objects.count(), 1)
+
+    def test_deal_approval_data_includes_resolved_company_and_contact_names(self):
+        user = get_user_model().objects.create_user(
+            username="deal-approval-related-records-user",
+            password="test-password",
+        )
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="crm",
+                codename="add_deal",
+            )
+        )
+        company = Company.objects.create(full_name="Northstar Labs")
+        contact = Contact.objects.create(
+            first_name="Ada",
+            email="ada@northstar.example",
+            company=company,
+        )
+        base_arguments = {
+            "name": "Northstar rollout",
+            "next_step": "Schedule kickoff",
+            "next_step_date": "2026-12-01",
+        }
+
+        with patch(
+            "ai_assistant.tools.interrupt",
+            side_effect=["rejected", "rejected"],
+        ) as interrupt:
+            prepare_deal.invoke(
+                {
+                    **base_arguments,
+                    "company_name": company.full_name,
+                    "contact_id": contact.pk,
+                },
+                config={"configurable": {"user_id": user.pk}},
+            )
+            prepare_deal.invoke(
+                base_arguments,
+                config={"configurable": {"user_id": user.pk}},
+            )
+
+        self.assertEqual(interrupt.call_count, 2)
+        related_data = [
+            call.args[0]["data"] for call in interrupt.call_args_list
+        ]
+        self.assertEqual(related_data[0]["company"], "Northstar Labs")
+        self.assertEqual(related_data[0]["contact"], "Ada")
+        self.assertIsNone(related_data[1]["company"])
+        self.assertIsNone(related_data[1]["contact"])
+
     def test_new_company_type_requires_one_user_department(self):
         user = get_user_model().objects.create_user(
             username="departmentless-company-user",
@@ -536,19 +784,18 @@ class TestAssistantApi(TestCase):
         self.assertEqual(response.data["status"], "error")
         self.assertIn("invalid or unavailable", response.data["message"])
 
-    def test_agent_tool_registry_includes_gemini_and_groq_callables(self):
-        self.assertEqual(
+    def test_agent_tool_registry_includes_crm_bundle(self):
+        self.assertIn(
+            "prepare_crm_bundle",
             {tool.name for tool in tools},
-            {
-                "search_database_schema",
-                "prepare_lead",
-                "prepare_company",
-                "list_departments",
-            },
         )
 
 
 class TestLlmFallback(TestCase):
+    def test_gemini_bindings_do_not_forward_parallel_tool_calls(self):
+        for model in (gemini_primary, gemini_fallback):
+            self.assertNotIn("parallel_tool_calls", model.kwargs)
+
     def test_falls_back_to_tool_capable_groq_runnable(self):
         def fail_gemini(prompt):
             raise RuntimeError(f"Gemini unavailable for: {prompt}")
