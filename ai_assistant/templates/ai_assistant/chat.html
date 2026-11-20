@@ -6,59 +6,62 @@
 {% block extrastyle %}
 {{ block.super }}
 <style>
-    /* ── Layout ── */
     #ai-chat-wrapper {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-        max-width: 900px;
+        width: 100%;
+        max-width: 1100px;
     }
 
-    /* ── Chat history box ── */
     #chat-box {
-        border: 1px solid var(--border-color, #ccc);
-        border-radius: 4px;
-        padding: 16px;
-        height: 420px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        height: 520px;
+        max-height: 68vh;
+        min-height: 360px;
         overflow-y: auto;
+        padding: 20px;
+        border: 1px solid var(--border-color, #ccc);
+        border-radius: 8px;
         background: var(--darkened-bg, #f8f8f8);
         font-size: 14px;
         line-height: 1.6;
     }
 
-    /* ── Individual messages ── */
     .msg {
-        margin-bottom: 12px;
-        padding: 10px 14px;
-        border-radius: 6px;
+        width: fit-content;
         max-width: 85%;
-        word-wrap: break-word;
+        padding: 12px 16px;
+        border-radius: 16px;
+        overflow-wrap: anywhere;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
     }
 
     .msg-user {
+        align-self: flex-end;
         background: var(--primary, #417690);
         color: #fff;
-        margin-left: auto;
-        text-align: right;
+        border-bottom-right-radius: 4px;
     }
 
     .msg-ai {
-        background: var(--selected-row, #e8f0d8);
+        align-self: flex-start;
+        background: var(--body-bg, #fff);
         color: var(--body-fg, #333);
-        margin-right: auto;
+        border: 1px solid var(--border-color, #ddd);
+        border-bottom-left-radius: 4px;
     }
 
     .msg-error {
+        align-self: flex-start;
         background: #fde8e8;
         color: #c0392b;
         border: 1px solid #c0392b;
-        margin-right: auto;
     }
 
     .msg-typing {
+        align-self: flex-start;
         background: var(--darkened-bg, #eee);
         color: var(--body-quiet-color, #666);
-        margin-right: auto;
         font-style: italic;
     }
 
@@ -79,79 +82,218 @@
         color: var(--link-fg, var(--primary, #417690));
     }
 
-    /* ── Approval card ── */
-    .approval-card {
-        border: 2px solid var(--primary, #417690);
-        padding: 16px;
-        border-radius: 6px;
-        background: var(--darkened-bg, #f8f8f8);
-        margin-bottom: 12px;
+    .chat-empty-state {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        min-height: 300px;
+        padding: 24px;
+        text-align: center;
     }
 
-    .approval-card h3 {
-        margin: 0 0 10px 0;
-        color: var(--primary, #417690);
-        font-size: 15px;
-    }
-
-    .approval-card pre {
-        background: var(--body-bg, #fff);
-        border: 1px solid var(--border-color, #ccc);
-        padding: 10px;
-        border-radius: 4px;
-        font-size: 13px;
-        overflow-x: auto;
-        white-space: pre-wrap;
+    .chat-empty-state h2 {
+        margin: 0;
         color: var(--body-fg, #333);
+        font-size: 22px;
+    }
+
+    .chat-empty-state p {
+        margin: 6px 0 0;
+        color: var(--body-quiet-color, #666);
+    }
+
+    .quick-prompts {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 10px;
+        width: min(100%, 760px);
+    }
+
+    .quick-prompt {
+        min-height: 48px;
+        padding: 10px 14px;
+        border: 1px solid var(--border-color, #ccc);
+        border-radius: 6px;
+        background: var(--body-bg, #fff);
+        color: var(--body-fg, #333);
+        cursor: pointer;
+        text-align: left;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .quick-prompt:hover,
+    .quick-prompt:focus-visible {
+        border-color: var(--primary, #23949f);
+        box-shadow: 0 0 0 2px rgba(35, 148, 159, 0.18);
+        outline: none;
+    }
+
+    .approval-card {
+        align-self: stretch;
+        padding: 0;
+        border: 1px solid var(--border-color, #ccc);
+        border-radius: 8px;
+        background: var(--body-bg, #fff);
+        color: var(--body-fg, #333);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .approval-card-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 14px 18px;
+        border-bottom: 1px solid #e6ca73;
+        border-radius: 7px 7px 0 0;
+        background: #fff4cc;
+        color: #654d0b;
+    }
+
+    .approval-card-header .material-icons {
+        margin-top: 2px;
+        color: #9a6b00;
+    }
+
+    .approval-card-title {
+        margin: 0;
+        color: inherit;
+        font-size: 16px;
+        font-weight: 700;
+    }
+
+    .approval-card-subtitle {
+        margin: 2px 0 0;
+        color: #725d24;
+        font-size: 12px;
+    }
+
+    .approval-card-content {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        padding: 16px 18px;
+    }
+
+    .approval-section h4 {
+        margin: 0 0 8px;
+        color: var(--body-fg, #333);
+        font-size: 14px;
+    }
+
+    .approval-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 8px;
+        margin: 0;
+    }
+
+    .approval-field {
+        min-width: 0;
+        padding: 9px 11px;
+        border: 1px solid var(--border-color, #e2e2e2);
+        border-radius: 5px;
+        background: var(--darkened-bg, #f8f8f8);
+    }
+
+    .approval-field dt {
+        margin-bottom: 2px;
+        color: var(--body-quiet-color, #666);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.035em;
+    }
+
+    .approval-field dd {
+        margin: 0;
+        color: var(--body-fg, #333);
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+    }
+
+    .approval-warnings {
+        margin: 0;
+        padding: 10px 12px 10px 30px;
+        border-left: 3px solid #d5a500;
+        background: #fff9e6;
+        color: #654d0b;
     }
 
     .approval-actions {
         display: flex;
         gap: 10px;
-        margin-top: 12px;
+        justify-content: flex-end;
+        padding: 12px 18px;
+        border-top: 1px solid var(--border-color, #ddd);
     }
 
-    /* ── Input area ── */
     #chat-input-row {
         display: flex;
-        gap: 10px;
+        align-items: stretch;
+        width: 100%;
         margin-top: 12px;
+        overflow: hidden;
+        border: 1px solid var(--border-color, #aaa);
+        border-radius: 5px;
+        background: var(--body-bg, #fff);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     }
 
     #chat-input {
         flex: 1;
-        padding: 10px 14px;
-        border: 1px solid var(--border-color, #ccc);
-        border-radius: 4px;
+        min-width: 0;
+        padding: 11px 14px;
+        border: 0;
+        border-radius: 0;
         font-size: 14px;
         background: var(--body-bg, #fff);
         color: var(--body-fg, #333);
     }
 
     #chat-input:focus {
-        outline: none;
-        border-color: var(--primary, #417690);
-        box-shadow: 0 0 0 2px rgba(65, 118, 144, 0.2);
+        outline: 2px solid var(--primary, #23949f);
+        outline-offset: -2px;
+        box-shadow: none;
     }
 
-    /* ── Buttons ── */
-    .btn-send {
-        padding: 10px 20px;
-        background: var(--primary, #417690);
-        color: #fff;
-        border: none;
-        border-radius: 4px;
+    .file-upload-trigger {
+        display: flex;
+        flex: 0 0 44px;
+        align-items: center;
+        justify-content: center;
+        border-right: 1px solid var(--border-color, #ddd);
+        color: var(--body-quiet-color, #666);
         cursor: pointer;
-        font-size: 14px;
-        font-weight: bold;
-        white-space: nowrap;
+    }
+
+    .file-upload-trigger:hover,
+    .file-upload-trigger:focus-within {
+        color: var(--primary, #23949f);
+        background: var(--darkened-bg, #f8f8f8);
+    }
+
+    .btn-send {
         display: flex;
         align-items: center;
+        justify-content: center;
         gap: 6px;
+        min-width: 100px;
+        padding: 10px 18px;
+        border: 0;
+        border-radius: 0;
+        background: var(--primary, #23949f);
+        color: #fff;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 700;
+        white-space: nowrap;
     }
 
     .btn-send:hover {
-        background: var(--primary-fg, #205067);
+        background: var(--button-hover-bg, #205067);
     }
 
     .btn-send:disabled {
@@ -160,16 +302,16 @@
     }
 
     .btn-approve {
-        padding: 8px 18px;
-        background: #28a745;
-        color: #fff;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-weight: bold;
         display: flex;
         align-items: center;
-        gap: 4px;
+        gap: 5px;
+        padding: 9px 16px;
+        border: 0;
+        border-radius: 4px;
+        background: #28a745;
+        color: #fff;
+        cursor: pointer;
+        font-weight: 700;
     }
 
     .btn-approve:hover {
@@ -182,16 +324,15 @@
     }
 
     .btn-reject {
-        padding: 8px 18px;
-        background: #dc3545;
-        color: #fff;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-weight: bold;
         display: flex;
         align-items: center;
-        gap: 4px;
+        gap: 5px;
+        padding: 9px 16px;
+        border: 0;
+        border-radius: 4px;
+        background: #dc3545;
+        color: #fff;
+        cursor: pointer;
     }
 
     .btn-reject:hover {
@@ -203,17 +344,67 @@
         cursor: not-allowed;
     }
 
-    /* ── File Attachment Status ── */
     #file-attachment-status {
         display: none;
-        padding: 10px;
-        background: #e8f0d8;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-        margin-bottom: 8px;
-        font-size: 13px;
         justify-content: space-between;
         align-items: center;
+        margin-bottom: 8px;
+        padding: 9px 12px;
+        border: 1px solid var(--border-color, #ccc);
+        border-radius: 5px;
+        background: var(--darkened-bg, #f8f8f8);
+        color: var(--body-fg, #333);
+        font-size: 13px;
+    }
+
+    .file-clear-button {
+        border: 0;
+        background: transparent;
+        color: #b32d2e;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 700;
+    }
+
+    @media (max-width: 600px) {
+        #chat-box {
+            height: 60vh;
+            min-height: 320px;
+            padding: 12px;
+        }
+
+        .msg {
+            max-width: 94%;
+        }
+
+        .chat-empty-state {
+            padding: 12px 4px;
+        }
+
+        .quick-prompts {
+            grid-template-columns: 1fr;
+        }
+
+        .approval-card-content {
+            padding: 12px;
+        }
+
+        .approval-actions {
+            padding: 10px 12px;
+        }
+
+        #chat-input-row {
+            margin-top: 8px;
+        }
+
+        .btn-send {
+            min-width: 46px;
+            padding: 10px 12px;
+        }
+
+        .btn-send .send-label {
+            display: none;
+        }
     }
 </style>
 {% endblock %}
@@ -228,33 +419,54 @@
 {% block content %}
 <div id="ai-chat-wrapper">
     <div id="content-main">
-        <div id="chat-box" aria-live="polite" aria-label="Chat history"></div>
+        <div id="chat-box" aria-live="polite" aria-label="Chat history">
+            <div id="chat-empty-state" class="chat-empty-state">
+                <div>
+                    <h2>{% trans "How can I help with your CRM?" %}</h2>
+                    <p>{% trans "Choose a suggestion or ask your own question." %}</p>
+                </div>
+                <div class="quick-prompts">
+                    <button type="button" class="quick-prompt"
+                        onclick="sendQuickPrompt('Create a deal for Acme Corp')">
+                        {% trans "Create a deal for Acme Corp" %}
+                    </button>
+                    <button type="button" class="quick-prompt"
+                        onclick="sendQuickPrompt('List all contacts for Cyberdyne')">
+                        {% trans "List all contacts for Cyberdyne" %}
+                    </button>
+                    <button type="button" class="quick-prompt"
+                        onclick="sendQuickPrompt('How many received payments do we have?')">
+                        {% trans "How many received payments do we have?" %}
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <!-- File Attachment Status Bar -->
         <div id="file-attachment-status">
             <span>📎 <strong id="file-name-text"></strong></span>
-            <button type="button" onclick="clearFile()"
-                style="background: none; border: none; color: red; cursor: pointer; font-weight: bold; font-size: 16px;">✖</button>
+            <button type="button" class="file-clear-button" onclick="clearFile()"
+                aria-label="{% trans 'Remove attached file' %}">✖</button>
         </div>
 
         <div id="chat-input-row">
             <!-- File Upload Button -->
-            <label for="file-upload"
-                style="cursor: pointer; padding: 10px; font-size: 20px; display: flex; align-items: center;"
-                title="Attach a document">
-                📎
+            <label for="file-upload" class="file-upload-trigger"
+                title="{% trans 'Attach a document' %}"
+                aria-label="{% trans 'Attach a document' %}">
+                <i class="material-icons" aria-hidden="true">attach_file</i>
             </label>
             <input id="file-upload" type="file" accept=".pdf,.docx,.txt" style="display: none;"
                 onchange="updateFileName()" />
 
             <input type="text" id="chat-input"
-                placeholder="{% trans 'Ask a question or say: create a lead for John, email john@example.com' %}"
+                placeholder="{% trans 'Ask a question or describe a CRM record to create' %}"
                 autocomplete="off"
                 onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); sendMessage(); }">
 
             <button id="send-btn" class="btn-send" onclick="sendMessage()">
                 <i class="material-icons" style="font-size:18px;">send</i>
-                {% trans 'Send' %}
+                <span class="send-label">{% trans 'Send' %}</span>
             </button>
         </div>
     </div>
@@ -262,6 +474,12 @@
 
 <script>
     let currentThreadId = null;
+
+    function sendQuickPrompt(prompt) {
+        const input = document.getElementById('chat-input');
+        input.value = prompt;
+        sendMessage();
+    }
 
     function updateFileName() {
         const fileInput = document.getElementById('file-upload');
@@ -376,6 +594,9 @@
 
     function appendMessage(role, content) {
         const box = document.getElementById('chat-box');
+        const emptyState = document.getElementById('chat-empty-state');
+        if (emptyState) emptyState.remove();
+
         const div = document.createElement('div');
         div.className = 'msg msg-' + role;
         if (role === 'user') {
@@ -414,28 +635,184 @@
         return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : '';
     }
 
+    function approvalValueText(value) {
+        if (value === null || value === undefined || value === '') {
+            return 'Not provided';
+        }
+        if (typeof value === 'boolean') {
+            return value ? 'Yes' : 'No';
+        }
+        if (Array.isArray(value)) {
+            return value.length
+                ? value.map(approvalValueText).join(', ')
+                : 'Not provided';
+        }
+        if (typeof value === 'object') {
+            const label = value.full_name || value.name || value.value;
+            if (label !== undefined && label !== null) {
+                return approvalValueText(label);
+            }
+            return Object.entries(value)
+                .map(([key, item]) =>
+                    `${approvalLabel(key)}: ${approvalValueText(item)}`)
+                .join(', ');
+        }
+        return String(value);
+    }
+
+    function approvalLabel(key) {
+        return key
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, character => character.toUpperCase());
+    }
+
+    function appendApprovalSection(parent, title, entries) {
+        const section = document.createElement('section');
+        section.className = 'approval-section';
+
+        const heading = document.createElement('h4');
+        heading.textContent = title;
+        section.appendChild(heading);
+
+        const grid = document.createElement('dl');
+        grid.className = 'approval-grid';
+        entries.forEach(([label, value]) => {
+            const field = document.createElement('div');
+            field.className = 'approval-field';
+
+            const term = document.createElement('dt');
+            term.textContent = label;
+            const description = document.createElement('dd');
+            description.textContent = approvalValueText(value);
+
+            field.appendChild(term);
+            field.appendChild(description);
+            grid.appendChild(field);
+        });
+        section.appendChild(grid);
+        parent.appendChild(section);
+    }
+
     function renderApprovalCard(payload) {
         const box = document.getElementById('chat-box');
         const card = document.createElement('div');
         card.className = 'approval-card';
-        const payloadStr = JSON.stringify(payload.data, null, 2);
-        card.innerHTML = `
-            <h3>
-                <i class="material-icons" style="font-size:18px;vertical-align:middle;color:#e67e22;">warning</i>
-                Action Requires Your Approval
-            </h3>
-            <p><strong>Action:</strong> ${escapeHtml(payload.action)}</p>
-            <p><strong>Details:</strong></p>
-            <pre>${escapeHtml(payloadStr)}</pre>
-            <div class="approval-actions">
-                <button class="btn-approve" onclick="handleDecision('approved', this.closest('.approval-card'))">
-                    <i class="material-icons" style="font-size:16px;">check_circle</i> Approve
-                </button>
-                <button class="btn-reject" onclick="handleDecision('rejected', this.closest('.approval-card'))">
-                    <i class="material-icons" style="font-size:16px;">cancel</i> Reject
-                </button>
-            </div>
-        `;
+        const data = payload && payload.data && typeof payload.data === 'object'
+            ? payload.data
+            : {};
+
+        const header = document.createElement('div');
+        header.className = 'approval-card-header';
+        const warningIcon = document.createElement('i');
+        warningIcon.className = 'material-icons';
+        warningIcon.setAttribute('aria-hidden', 'true');
+        warningIcon.textContent = 'warning_amber';
+        const headerText = document.createElement('div');
+        const title = document.createElement('h3');
+        title.className = 'approval-card-title';
+        title.textContent = 'Review CRM Changes';
+        const subtitle = document.createElement('p');
+        subtitle.className = 'approval-card-subtitle';
+        subtitle.textContent = payload.record_type || payload.action || '';
+        headerText.appendChild(title);
+        headerText.appendChild(subtitle);
+        header.appendChild(warningIcon);
+        header.appendChild(headerText);
+        card.appendChild(header);
+
+        const content = document.createElement('div');
+        content.className = 'approval-card-content';
+
+        if (payload.action === 'CREATE_CRM_BUNDLE') {
+            const company = data.company || {};
+            const contact = data.contact || {};
+            const deal = data.deal || {};
+            const companyName = typeof company === 'string'
+                ? company
+                : company.name || company.full_name || data.company_name;
+            const contactName = typeof contact === 'string'
+                ? contact
+                : contact.full_name
+                    || contact.name
+                    || [contact.first_name, contact.middle_name, contact.last_name]
+                        .filter(Boolean)
+                        .join(' ');
+
+            appendApprovalSection(content, 'Company', [
+                ['Name', companyName],
+                ['Country', company.country || company.country_name || data.country_name],
+            ]);
+            appendApprovalSection(content, 'Contact', [
+                ['Name', contactName],
+                ['Email', contact.email || data.contact_email],
+            ]);
+            appendApprovalSection(content, 'Deal', [
+                ['Name', deal.name || data.deal_name],
+                ['Amount', deal.amount || data.deal_amount],
+                ['Currency', deal.currency || data.currency_name],
+                ['Next Step', deal.next_step || data.deal_next_step],
+                ['Next Step Date', deal.next_step_date || data.deal_next_step_date],
+                ['Workflow', deal.workflow || data.deal_workflow],
+                ['Description', deal.description || data.deal_description],
+            ]);
+        } else {
+            appendApprovalSection(
+                content,
+                'Details',
+                Object.entries(data).map(([key, value]) => [
+                    approvalLabel(key),
+                    value,
+                ]),
+            );
+        }
+
+        if (payload.related && Object.keys(payload.related).length) {
+            appendApprovalSection(
+                content,
+                'Related Records',
+                Object.entries(payload.related).map(([key, value]) => [
+                    approvalLabel(key),
+                    value,
+                ]),
+            );
+        }
+
+        if (Array.isArray(payload.warnings) && payload.warnings.length) {
+            const warnings = document.createElement('ul');
+            warnings.className = 'approval-warnings';
+            payload.warnings.forEach(warning => {
+                const item = document.createElement('li');
+                item.textContent = approvalValueText(warning);
+                warnings.appendChild(item);
+            });
+            content.appendChild(warnings);
+        }
+        card.appendChild(content);
+
+        const actions = document.createElement('div');
+        actions.className = 'approval-actions';
+        [
+            ['Approve', 'check_circle', 'btn-approve', 'approved'],
+            ['Reject', 'cancel', 'btn-reject', 'rejected'],
+        ].forEach(([label, iconName, className, decision]) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = className;
+
+            const icon = document.createElement('i');
+            icon.className = 'material-icons';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.textContent = iconName;
+            const buttonLabel = document.createElement('span');
+            buttonLabel.textContent = label;
+
+            button.appendChild(icon);
+            button.appendChild(buttonLabel);
+            button.addEventListener('click', () => handleDecision(decision, card));
+            actions.appendChild(button);
+        });
+        card.appendChild(actions);
+
         box.appendChild(card);
         box.scrollTop = box.scrollHeight;
     }
