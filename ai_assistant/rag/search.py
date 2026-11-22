@@ -47,7 +47,7 @@ def _load_resources():
         _index = faiss.read_index(index_path)
 
         metadata_path = os.path.join(data_dir, 'index_metadata.json')
-        with open(metadata_path, 'r') as f:
+        with open(metadata_path, 'r', encoding='utf-8') as f:
             _metadata = json.load(f)
 
         catalog_path = os.path.join(data_dir, 'schema_catalog.json')
@@ -162,9 +162,9 @@ if __name__ == "__main__":
     print("\n--- Testing RAG Search (raw) ---")
 
     for q in [
-        "Where do I store sales deals?",
-        "How do I track a person's phone number?",
-        "Where is the company address saved?",
+        "Where do I store a new sales prospect?",
+        "How do I track a lead's phone number?",
+        "Where is the lead source saved?",
     ]:
         print(f"\nQuery: '{q}'")
         for match in search_schema(q, top_k=2):
@@ -174,9 +174,9 @@ if __name__ == "__main__":
     print("\n--- Testing relationship expansion ---")
 
     for q in [
-        "Show me payments for a company",
-        "How are payments connected to companies?",
-        "Which shipments belong to this deal?",
+        "What fields does a lead have?",
+        "How is a lead connected to a company?",
+        "Which deals come from a lead?",
         "Which contacts belong to a company?",
     ]:
         print(f"\nQuery: '{q}'")

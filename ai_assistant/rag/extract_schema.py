@@ -20,6 +20,43 @@ os.environ.setdefault(
 
 django.setup()
 
+# System/audit fields: kept in the catalog but left out of search text.
+AUDIT_FIELDS = {
+    "creation_date", "update_date", "modified_by", "token", "avatar",
+}
+
+# Plain-English purpose of key models. Embedding a short business
+# description alongside the field names makes questions like "where do I
+# store a prospect?" find the right model.
+MODEL_NOTES = {
+    "Lead": (
+        "A sales lead (prospect): a potential customer who has not yet "
+        "been converted into a Contact and Company. Stores the person's "
+        "name, email and phone, their company details, lead source, owner "
+        "and tags."
+    ),
+    "Contact": "A person who works for a Company and is a known customer contact.",
+    "Company": "An organisation that is a customer or partner of the business.",
+    "Deal": "A sales deal (opportunity) with a next step, amount and stage.",
+    "Request": "An inquiry or request from a customer, linked to a lead, contact or company.",
+    "LeadSource": "Where a lead came from, for example referral, website or exhibition.",
+    "ClientType": "The type of a company, such as customer or partner.",
+    "Industry": "The industry or business sector of a company.",
+    "Tag": "A label that can be attached to leads, contacts and companies.",
+    "Country": "A country; leads, contacts and companies reference it.",
+    "City": "A city belonging to a country.",
+    "Stage": "A stage in the sales pipeline that a deal moves through.",
+    "CrmEmail": "An email message linked to a lead, contact, company or deal.",
+}
+
+
+def _hint(field):
+    """Verbose name when it says more than the field name does."""
+    verbose = str(getattr(field, "verbose_name", "") or "")
+    if verbose.lower().replace(" ", "_").replace("/", "_") == field.name:
+        return ""
+    return verbose
+
 
 # --------------------------------------------------
 # 2. Extract CRM models
@@ -66,6 +103,7 @@ def extract_models():
 
             field_info = {
                 "name": field.name,
+                "verbose_name": _hint(field),
                 "type": field.get_internal_type(),
                 "null": field.null,
                 "blank": field.blank,
@@ -85,6 +123,7 @@ def extract_models():
 
                 relationship = {
                     "field": field.name,
+                    "verbose_name": _hint(field),
                     "type": get_relationship_type(field),
                     "related_model": related_model.__name__,
                     "related_model_label": related_model._meta.label,
@@ -208,27 +247,30 @@ def extract_models():
             continue
 
         field_text = ", ".join(
-            f"{field['name']} ({field['type']})"
+            f"{field['name']}"
+            + (f" ({field['verbose_name']})" if field.get("verbose_name") else "")
             for field in data["fields"]
+            if field["name"] not in AUDIT_FIELDS
         )
 
         relationship_text = ", ".join(
-            f"{rel['field']} connects to {rel['related_model']} "
-            f"through {rel['type']}"
+            f"{rel['field']} links to {rel['related_model']}"
             for rel in data["relationships"]
+            if rel["field"] not in AUDIT_FIELDS
         )
 
         reverse_text = ", ".join(
-            f"{rel['related_model']} connects to this model "
-            f"through {rel['field']}"
-            for rel in data["reverse_relationships"]
+            sorted({rel["related_model"]
+                    for rel in data["reverse_relationships"]})
         )
 
+        note = MODEL_NOTES.get(model_name, "")
         description = (
-            f"{model_name} is a CRM model. "
+            f"{model_name} ({data['verbose_name']}) is a CRM model. "
+            f"{note} "
             f"Fields: {field_text}. "
             f"Relationships: {relationship_text}. "
-            f"Related models: {reverse_text}."
+            f"Referenced by: {reverse_text}."
         )
 
         data["description"] = description

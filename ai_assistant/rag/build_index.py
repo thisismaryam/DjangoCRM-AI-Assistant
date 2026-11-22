@@ -15,7 +15,7 @@ def build_vector_index():
             f"Error: Could not find {json_path}. Run the extractor script first.")
         return
 
-    with open(json_path, 'r') as f:
+    with open(json_path, 'r', encoding='utf-8') as f:
         schema_catalog = json.load(f)
 
     # 2. Initialize the embedding model (this downloads the model on first run)
@@ -52,7 +52,7 @@ def build_vector_index():
 
     # Save the mapping of index ID -> Model Name so we know what FAISS found later
     metadata_path = os.path.join(data_dir, 'index_metadata.json')
-    with open(metadata_path, 'w') as f:
+    with open(metadata_path, 'w', encoding='utf-8') as f:
         json.dump(model_names, f, indent=4)
 
     print(f"SUCCESS! Built FAISS index with {index.ntotal} vectors.")

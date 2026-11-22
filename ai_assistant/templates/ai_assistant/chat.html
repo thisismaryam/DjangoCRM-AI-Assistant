@@ -777,6 +777,14 @@
             );
         }
 
+        if (payload.inferred && Object.keys(payload.inferred).length) {
+            appendApprovalSection(
+                content,
+                'Filled automatically',
+                Object.entries(payload.inferred),
+            );
+        }
+
         if (Array.isArray(payload.warnings) && payload.warnings.length) {
             const warnings = document.createElement('ul');
             warnings.className = 'approval-warnings';

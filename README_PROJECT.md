@@ -17,24 +17,19 @@ screens and workflows. The project includes customer and sales records, task
 management, analytics, email and mailing tools, shared chat, reminders, and
 other business utilities.
 
-This checkout also includes an AI assistant. It can answer CRM schema
-questions using a local search index, look up CRM records with database tools,
-and prepare CRM records for creation. Write operations pause for explicit
-approval before changing the database. A bundled workflow can prepare a
-Company, Contact, and Deal together for one approval and create them in a
-single transaction. The assistant is an addition to the CRM; it does not
-replace the regular admin interface or the CRM's existing permissions and
-business workflows.
+This checkout also includes an AI assistant focused on **Leads**. It can
+answer CRM schema questions using a local search index, look up Companies and
+Contacts (read-only), and prepare a new Lead for creation. The write step
+pauses for explicit approval before changing the database. The assistant is an
+addition to the CRM; it does not replace the regular admin interface or the
+CRM's existing permissions and business workflows.
 
-##  Why this AI Assistant is different (Business Value)
+## Why this AI Assistant is different (Business Value)
 
-Most AI integrations blindly pass data to a database, risking corrupted records and broken relationships. This assistant is built with **enterprise-grade safety rails**:
-
-1. **Document-to-CRM Ingestion:** Users can upload a PDF or DOCX proposal. The AI extracts the Company, Contact, Deal value, Description, and Workflow, and maps it directly to the CRM schema.
-2. **1-Click Bundles:** Creating a Company, Contact, and Deal usually takes 3 separate forms. Our AI uses `prepare_crm_bundle` to gather all three and present a **single unified approval card**. If one fails, the entire database transaction rolls back safely.
-3. **Strict Relational Guardrails:** The AI verifies cross-model relationships. For example, it will *refuse* to create a Deal if the specified Contact person does not work for the specified Company.
-4. **Human-in-the-Loop:** The AI can never write to the database silently. It pauses via LangGraph `interrupt()` and requires a human to click "Approve" on the UI before executing `transaction.atomic()`.
-5. **Intelligent Context:** Using LangGraph state checkpointing, you can interrupt the AI mid-flow (e.g., *"Wait, change the deal amount to $7,500"*) and it will update the pending approval card without losing the rest of the data.
+1. **Document-to-Lead ingestion:** Users can upload a PDF, DOCX, or TXT file; the assistant extracts the person's details and prepares a Lead.
+2. **Human-in-the-Loop:** The AI never writes to the database silently. It pauses via LangGraph `interrupt()` and a human must click "Approve" before the Lead is saved.
+3. **Safe with related records:** A Lead can reference a Company, Contact, Country, City and more. If a referenced record does not exist the assistant still works; it never invents IDs.
+4. **Intelligent context:** LangGraph state checkpointing lets the user answer follow-up questions or interrupt mid-flow without losing the request.
 
 
 ## Main components
@@ -83,12 +78,12 @@ remain the same if settings are changed.
 | `ai_assistant/agent.py` | Defines the agent state, request-aware system prompt, conversation trimming, and LangGraph workflow. |
 | `ai_assistant/context.py` | Keeps recent complete user turns within the configured conversation-history limits. |
 | `ai_assistant/llm.py` | Configures Gemini primary and fallback models, followed by Groq, with CRM tools bound to each. |
-| `ai_assistant/tools.py` | Implements schema lookup, CRM record reads, approval-gated write tools, the bundled Company/Contact/Deal workflow, and tool registration. |
+| `ai_assistant/tools.py` | Implements schema lookup, read-only Company/Contact lookups, the approval-gated `prepare_lead` tool, and tool registration. |
 | `ai_assistant/documents/extract.py` | Extracts text from PDF, DOCX, and TXT uploads. |
 | `ai_assistant/rag/` | Embeds schema descriptions and searches a FAISS vector index. |
 | `ai_assistant/data/schema_catalog.json` | Extracted CRM model field names, types, and required flags. |
 | `ai_assistant/data/index_metadata.json` and `vector.index` | Maps indexed vectors to model names and stores the FAISS index. |
-| `ai_assistant/tests.py` | Tests for schema search, CRM preparation and approval, bundle creation and rollback, provider fallback, and API behavior. |
+| `ai_assistant/tests.py` | Tests for schema search, lead preparation and approval, read-only lookups, provider fallback, and API behavior. |
 | `checkpoints.sqlite` | LangGraph conversation state and interrupted approvals, created at runtime. |
 
 ### Chat and tool workflow
@@ -99,33 +94,21 @@ remain the same if settings are changed.
    support PDF, DOCX, and TXT files; extracted text is appended to the request.
 2. The LangGraph agent uses Gemini primary, Gemini fallback, and then Groq if
    earlier providers raise errors. Each provider receives the same registered
-   tools: schema search, department listing, CRM record reads, and approval-
-   gated CRM write tools.
-3. Schema questions use `search_database_schema`. Record questions and
-   calculations use the relevant database read tool rather than relying on
-   conversational memory. The schema index describes model structure; database
-   tools verify actual records.
-4. The write tools cover leads, companies, contacts, deals, and payments.
-   They prepare a proposal and pause for explicit approval; rejecting a
-   proposal leaves the database unchanged. Permissions are checked for writes.
-   `prepare_company` can reuse existing Country, City, and ClientType records
-   and create missing supplied references after approval. A city requires a
-   country, and creating a missing ClientType requires exactly one department
-   associated with the user.
-5. For a request to create a Company, Contact, and Deal together, the agent
-   calls `prepare_crm_bundle` instead of the individual write tools. One
-   approval card summarizes all three records; existing matching Company and
-   Contact records are reused. After approval, missing records are created in
-   Company → Contact → Deal order in one database transaction, so a failed
-   step rolls back the bundle.
-6. Document extraction rules map an uploaded section titled “Workflow” or
-   “Stages”, or a numbered list of steps, to the Deal's `workflow` field.
-   General project-description text is mapped to the Deal's `description`
-   field. These values are included in the bundle approval proposal.
-7. The approval endpoint resumes only the current authenticated user's
-   namespaced conversation. The assistant does not provide project or task
-   management tools; those CRM features remain available through the regular
+   tools: `search_database_schema`, `list_departments`, `search_companies`,
+   `search_contacts` and `prepare_lead`.
+3. Schema questions use `search_database_schema`. Questions about whether a
+   Company or Contact exists use the read-only search tools. The schema index
+   describes model structure; database tools verify actual records.
+4. `prepare_lead` is the only write tool. It checks the `crm.add_lead`
+   permission, pauses for explicit approval, and only then saves the Lead.
+   Rejecting the proposal leaves the database unchanged, and a Lead whose
+   email already exists is not created. A Company name that does not exist in
+   the CRM does not stop the lead from being created.
+5. The assistant does not create or change Companies, Contacts, Deals,
+   Payments, projects, or tasks; those remain available through the regular
    application interfaces.
+6. The approval endpoint resumes only the current authenticated user's
+   namespaced conversation.
 
 The browser renders bold text, simple ordered/unordered lists, and links in
 assistant messages. It builds DOM elements rather than inserting arbitrary
@@ -163,7 +146,7 @@ The checked-in schema catalog and FAISS index are generated from CRM models.
 After changing CRM models, rebuild both artifacts from the repository root:
 
 ```powershell
-python ai_assistant\run_extractor.py
+python ai_assistant\rag\extract_schema.py
 python ai_assistant\rag\build_index.py
 ```
 
@@ -249,10 +232,9 @@ relying on development static serving.
 ## Tests and checks
 
 Run Django's configuration checks and assistant tests from the repository
-root. The assistant tests cover schema retrieval, CRM record preparation,
-bundled approval and transaction rollback, provider fallback, tool
-registration, document-extraction prompt guidance, and authenticated thread
-isolation:
+root. The assistant tests cover schema retrieval, lead preparation and
+approval, read-only lookups, provider fallback, tool registration, and
+authenticated thread isolation:
 
 ```powershell
 python manage.py check
