@@ -125,7 +125,8 @@ dmypy.json
 # IDE
 .settings
 .idea
-
+checkpoints.sqlite
+*.patch
 # VScode settings
 .vscode/
 pytest.ini
